@@ -360,12 +360,6 @@ l_counting_survival_sim = l_survival_sim %>% map(., ~counting_process_form(.))
 
 names_dlnm_funs = c("splines_3", "splines_4", "splines_5", "splines_6", "ploy2", "lin")
 names_truerel = c(names_rels, name_extra)
-d_aic = tibble(
-  aic = numeric(),
-  fun = character(),
-  rel = character()
-  )
-
 aic_vec = c()
 for(i in 1:length(arglist)){
   surfit_j_constant = coxph(Surv(enter, exit, event) ~ crossbasis_j_constant[[i]], l_counting_survival_sim[[1]], y = FALSE, ties = "efron")
@@ -381,9 +375,46 @@ d_aic_amount_load = enframe(aic_vec, name = NULL) %>%
                            true_rels = rep(names_truerel, length(arglist))) %>% rename(aic = value)
 best_aics_tl_amount = d_aic_amount_load %>% group_by(true_rels) %>% filter(aic == min(aic))
 
+#--------------------do the same for change in load
+
+crossbasis_lin_constant = arglist %>% 
+  map(., ~crossbasis(l_q_matrices_change[[1]],
+                     lag=c(lag_min, lag_max),
+                     argvar = list(fun="lin"),
+                     arglag = .))
+
+crossbasis_lin_decay = arglist %>% 
+  map(., ~crossbasis(l_q_matrices_change[[2]],
+                     lag=c(lag_min, lag_max),
+                     argvar = list(fun="lin"),
+                     arglag = .))
+
+crossbasis_lin_exponential_decay = arglist %>% 
+  map(., ~crossbasis(l_q_matrices_change[[3]],
+                     lag=c(lag_min, lag_max),
+                     argvar = list(fun="lin"),
+                     arglag = .))
+
+
+# need data on counting process form
+l_counting_survival_sim_change = l_survival_sim_change %>% map(., ~counting_process_form(.))
+aic_vec_change = c()
+for(i in 1:length(arglist)){
+  survfit_lin_constant = coxph(Surv(enter, exit, event) ~ crossbasis_lin_constant[[i]], l_counting_survival_sim_change[[1]], y = FALSE, ties = "efron")
+  survfit_lin_decay = coxph(Surv(enter, exit, event) ~ crossbasis_lin_decay[[i]], l_counting_survival_sim_change[[2]], y = FALSE, ties = "efron")
+  survfit_lin_exponential_decay = coxph(Surv(enter, exit, event) ~ crossbasis_lin_exponential_decay[[i]], l_counting_survival_sim_change[[3]], y = FALSE, ties = "efron")
+  aic_change = c(AIC(survfit_lin_constant), AIC(survfit_lin_decay), AIC(survfit_lin_exponential_decay))
+  aic_vec_change = append(aic_vec_change, aic_change)
+}
+
+d_aic_change_load = enframe(aic_vec_change, name = NULL) %>% 
+                    mutate(fun_names = rep(names_dlnm_funs, each = 3), 
+                    true_rels = rep(names_rels, length(arglist))) %>% rename(aic = value)
+best_aics_tl_change = d_aic_change_load %>% group_by(true_rels) %>% filter(aic == min(aic))
 
 
 
+#---------------------------------------running the different models of training load
 
 
 # RUN THE MODEL, SAVING IT IN THE LIST WITH MINIMAL INFO (SAVE MEMORY)
