@@ -358,7 +358,7 @@ crossbasis_flin_direction_flip = arglist %>%
 # need data on counting process form
 l_counting_survival_sim = l_survival_sim %>% map(., ~counting_process_form(.))
 
-names_dlnm_funs = c("splines_3", "splines_4", "splines_5", "splines_6", "ploy2", "lin")
+names_dlnm_funs = c("splines_3", "splines_4", "splines_5", "splines_6", "poly2", "lin")
 names_truerel = c(names_rels, name_extra)
 aic_vec = c()
 for(i in 1:length(arglist)){
@@ -395,7 +395,6 @@ crossbasis_lin_exponential_decay = arglist %>%
                      argvar = list(fun="lin"),
                      arglag = .))
 
-
 # need data on counting process form
 l_counting_survival_sim_change = l_survival_sim_change %>% map(., ~counting_process_form(.))
 aic_vec_change = c()
@@ -414,7 +413,67 @@ best_aics_tl_change = d_aic_change_load %>% group_by(true_rels) %>% filter(aic =
 
 
 
-#---------------------------------------running the different models of training load
+####################################### Running the different models of training load ####################################
+# Function for calculating rolling averages on a chooseable number of days
+# Based on rollapplyr, not rollmean, as rollmean will only start calculating averages
+# at n values, while rollapplyr allows the user to decide preliminary values.
+ra = function(x, n_days, window = TRUE, ...){
+  zoo::rollapplyr(x, n_days, mean, partial = window)
+}
+
+# function for calculating exponentially waited moving averages
+# using similar syntax as the RA-function
+ewma = function(x, n_days, window){
+  TTR::EMA(x, n = window, ratio = 2/(1+n_days))
+}
+
+# calc rolling average and ewma on training load amount
+d_sim_tl_hist_mod = d_sim_tl_hist %>% 
+                mutate(ra_t_load = ra(d_sim_tl_hist$t_load, 28),
+                ewma_t_load = ewma(d_sim_tl_hist$t_load, 28, 1))
+
+# calculate 7:28 coupled ACWR using RA on training load amount (this becomes, in theory, a measure of change)
+# move 1 day at a time as advised in Carey et al. 2017
+# function calculates RA on a sliding window of 21 days
+chronic_ra = function(x){
+  l = slide(x, ~ra(., 28), .before = 27, step = 1, .complete =TRUE) %>% map(last)
+  l = compact(l)
+  l = unlist(l)
+  l
+}
+
+# function calculates mean on a sliding window of 7 days
+acute_mean = function(x){
+  l = slide(x, ~mean(.), .before = 6, step = 1, .complete =TRUE)
+  l = compact(l)
+  l = unlist(l)
+  l
+}
+
+# The first 27 days of injuries need to be discarded for the first acute window
+# meaning that every athlete which has an event during the first 27 days have to be removed
+l_survival_sim_change_acwr = l_survival_sim_change %>% map(. %>% filter(Fup >= 27))
+
+# the first acute load can be calulated from day 22 to day 28
+# to have an equal number acute and chronic values
+d_sim_tl_hist_acwr_acute = d_sim_tl_hist %>% filter(day >= 22)
+
+d_sim_hist_acwr_acute_nested = d_sim_tl_hist_acwr_acute %>% nest(data = c(t_load, day, t_load_change))
+d_sim_hist_acwr_chronic_nested = d_sim_tl_hist %>% nest(data = c(t_load, day, t_load_change))
+
+d_sim_hist_acwr_acute_nested$data = d_sim_hist_acwr_acute_nested$data %>% map(., ~acute_mean(.$t_load))
+d_sim_hist_acwr_chronic_nested$data = d_sim_hist_acwr_chronic_nested$data %>% map(., ~chronic_ra(.$t_load))
+
+d_sim_hist_acute = d_sim_hist_acwr_acute_nested %>% 
+  unnest(cols = c(data)) %>% 
+  mutate(day = rep(28:t_max, nsub)) %>% 
+  rename(acute_load = data)
+d_sim_hist_chronic = d_sim_hist_acwr_chronic_nested %>% 
+  unnest(cols = c(data)) %>% 
+  mutate(day = rep(28:t_max, nsub))  %>% 
+  rename(chronic_load = data)
+d_sim_hist_acwr = d_sim_hist_acute %>% left_join(d_sim_hist_chronic, by = c("id", "day")) %>% mutate(acwr = acute_load/chronic_load)
+
 
 
 # RUN THE MODEL, SAVING IT IN THE LIST WITH MINIMAL INFO (SAVE MEMORY)
