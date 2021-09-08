@@ -40,6 +40,7 @@ tl_predvalues_change = seq(min(tl_observed_change), max(tl_observed_change), 25)
 
 # functions for simulating the effect of the amount of training load on injury risk (J-shape)
 # and the effect of amount of change of training load on injury risk (linear)
+# the only exception is for the lag-function wdirection_flip, the linear function will be used instead of J-shape
 fj = function(x)case_when(x < 600 ~ ((600-x)/200)^1.5/10,
                           x >= 600 ~ ((x-600)/200)^3/30)
 flin = function(x) 0.0009*x
@@ -52,12 +53,10 @@ wdecay = function(lag)exp(-lag/100)
 wexponential_decay = function(lag)exp(-lag/10)^2
 wdirection_flip = function(lag)case_when(lag <= 6 ~ exp(-lag/10)^2,
                                          lag >  6 ~ -exp(lag/50)^2)
-
-
-# making  lists with the functions
-flist = list(flin, flin, fj, fj)
-wlist = list(wconst, wconst, wdecay, wdecay)
-
+# list of functions
+flist = list(fj, fj, fj, flin)
+wlist = list(wconst, wdecay, wexponential_decay, wdirection_flip)
+wlist_change = list(wconst, wdecay, wexponential_decay)
 
 # COMBINATIONS OF FUNCTIONS USED TO SIMULATE DATA
 combsim = cbind(x_funs=rep(c("flin", "fj"), each=2),
@@ -172,16 +171,46 @@ calc_cumeff = function(tl_hist, fvar, flag){
 # as.numeric(cumeffect_mat)
 # calc_cumeff(test_sim$t_load, fvar = flin, flag = wdecay)
 
+# function for calculating the cumulative effect for each individual in a dataset
+# with the choice of var-function (fvar) and lag-function (flag)
+# and specification of whether it is the amount of training load "amount"
+# or change in training load "change" the calculation is performed on.
+calc_cumeffs_all = function(l_sim_tl_hist, t_load_type = "amount", fvar, flag){
+  
+  if(t_load_type == "amount"){
+    l_sim_tl_hist$data = l_sim_tl_hist$data %>% map(~calc_cumeff(.$t_load, fvar, flag))  
+    } else if(t_load_type == "change"){
+    l_sim_tl_hist$data = l_sim_tl_hist$data %>% map(~calc_cumeff(.$t_load_change, fvar, flag))
+  }
+  d_cumeffs = unnest(l_sim_tl_hist, cols = c(data)) %>% rename(cumeff = data)
+  d_cumeffs
+}
+
+# nest simulated dataset on each individual
+l_load_nested = d_sim_tl_hist %>% nest(data = c(day, t_load, t_load_change)) 
+# test: calc_cumeffs_all(l_load_nested, fj, wdecay)
+
+# calc cumulative effects for each function in flist matched to each function in wlist
+l_cumeffs = map2(.x = flist,
+                 .y = wlist, 
+                 ~calc_cumeffs_all(l_load_nested, "amount", .x, .y))
+# add labels to identify relationship in each element in the list
+names_rels = c("constant", "decay", "exponential_decay")
+name_extra = "flin_direction_flip"
+l_cumeffs = map2(.x = l_cumeffs,
+                 .y = c(names_rels, name_extra), 
+                 ~.x %>% mutate(relationship = paste0(.y)))
+
+# do the same for change. the difference is that flin is used for all functions in wlist_change.
+l_cumeffs_change = wlist_change %>% 
+                   map(~calc_cumeffs_all(l_load_nested, "change", flin, .)) %>% 
+                   map2(.x = .,
+                        .y = names_rels, 
+                        ~.x %>% mutate(relationship = paste0(.y)))
+
 # calculate cumulative effect of training load for each individual,
 # as a cross-basis of a function f or exposure amount, and function w, lag-time
-l_load_nested = d_sim_tl_hist %>% nest(data = t_load) 
-
-# can run a for-loop for each element in a list of functions
-# for the final simulation
-# but we will run 1 at a time during testing of the code.
-# for(i in 1:nrow(combsim)){
-# l = l_load_nested$data %>% map(~fcumeff_tot(.$t_load, lag = c(lag_min, lag_max), combsim$x_funs[i], combsim$lag_funs[i]))
-# }
+l_load_nested = d_sim_tl_hist %>% nest(data = c(day, t_load, t_load_change)) 
 l_load_nested$data = l_load_nested$data %>% map(~calc_cumeff(.$t_load, fj, wdecay))
 d_load_cumeffs_j_decay = unnest(l_load_nested, cols = c(data)) %>% rename(cumeff = data)
 
