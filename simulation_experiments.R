@@ -126,16 +126,24 @@ plot(x = tl_predvalues_change, y = dag0)
 set.seed(1234)
 l_tl_hist = vector(mode = "list", length = nsub)
 l_tl_hist = l_tl_hist %>% map(~sample(tl_valid, t_max))
+# add IDs and calc the change in training load from previous day
 d_sim_tl_hist = l_tl_hist %>% 
   map(. %>% enframe(name = NULL)) %>% 
   bind_rows() %>% 
-  mutate(id = rep(1:nsub, each = t_max)) %>% 
-  rename(t_load = value)
+  rename(t_load = value) %>% 
+  mutate(id = rep(1:nsub, each = t_max),
+         day = rep(1:t_max, nsub),
+         t_load_change = lead(t_load)-t_load) 
 
 # arrange in a matrix which will be used later
 d_sim_tl_hist_spread_day = 
-  d_sim_tl_hist %>% mutate(day = rep(1:t_max, nsub)) %>% 
+  d_sim_tl_hist  %>% select(-t_load_change) %>% 
   pivot_wider(names_from = day, values_from = t_load) %>% select(-id) %>% as.matrix
+
+d_sim_tl_hist_spread_day_change = 
+  d_sim_tl_hist %>% select(-t_load) %>%
+  pivot_wider(names_from = day, values_from = t_load_change) %>% select(-id) %>% as.matrix
+
 
 # function to compute the cumulative effect of training load exposure, requires:
 # tl_hist     the tl exposure history from t0 to max(t) for one participant
