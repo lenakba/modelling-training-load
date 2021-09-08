@@ -22,7 +22,7 @@ t_max = 300 # number of days (length of study)
 
 # observed values
 tl_observed = (d_load %>% filter(srpe <= 1200))$srpe
-tl_observed_change = lead(tl_observed) - tl_observed
+tl_observed_change = 2 - tl_observed
 tl_observed_change = tl_observed_change[-length(tl_observed_change)]
 tl_valid = min(tl_observed):max(tl_observed)
 # lag set at 4 weeks (28) as is often used in tl studies
@@ -40,9 +40,6 @@ tl_predvalues_change = seq(min(tl_observed_change), max(tl_observed_change), 25)
 
 # functions for simulating the effect of the amount of training load on injury risk (J-shape)
 # and the effect of amount of change of training load on injury risk (linear)
-# fj = function(x)case_when(x < 600 ~ ((x-600)/200)^2/20,
-#                           x >= 600 ~ ((x-600)/200)^2/10)
-
 fj = function(x)case_when(x < 600 ~ ((600-x)/200)^1.5/10,
                           x >= 600 ~ ((x-600)/200)^3/30)
 flin = function(x) 0.0009*x
@@ -52,46 +49,76 @@ flin = function(x) 0.0009*x
 # 4 scenarios: constant, decay, exponential decay, decay from positive to negative effect
 wconst = function(lag)lag-lag+0.80
 wdecay = function(lag)exp(-lag/100)
+wexponential_decay = function(lag)exp(-lag/10)^2
+wdirection_flip = function(lag)case_when(lag <= 6 ~ exp(-lag/10)^2,
+                                         lag >  6 ~ -exp(lag/50)^2)
+
 
 # making  lists with the functions
 flist = list(flin, flin, fj, fj)
 wlist = list(wconst, wconst, wdecay, wdecay)
+
 
 # COMBINATIONS OF FUNCTIONS USED TO SIMULATE DATA
 combsim = cbind(x_funs=rep(c("flin", "fj"), each=2),
                 lag_funs=rep(c("wconst", "wdecay"), 2)) %>% 
           as_tibble()
 
-# create the f*w functions
-flinconst = function(x, lag) flin(x) * wconst(lag)
+# create the f*w functions for amount of training load
 fjconst = function(x, lag) fj(x) * wconst(lag)
-flindecay = function(x, lag) flin(x) * wdecay(lag)
 fjdecay = function(x, lag) fj(x) * wdecay(lag)
-fw_funs = list(flindecay, fjdecay, flinconst, fjconst)
+fjexponential_decay = function(x, lag) fj(x) * wexponential_decay(lag)
+flindirection_flip = function(x, lag) flin(x) * wdirection_flip(lag)
+fw_funs = list(fjconst, fjdecay, fjexponential_decay, flindirection_flip)
+
+# f*w functions for change in load
+flinconst = function(x, lag) flin(x) * wconst(lag)
+flindecay = function(x, lag) flin(x) * wdecay(lag)
+flinexponential_decay = function(x, lag) flin(x) * wexponential_decay(lag)
+fw_funs_change = list(flinconst, flindecay, flinexponential_decay)
 
 # calculate coefficients for each combination of f*w
 calc_coefs = function(x, lag, FUN){
   coefs = outer(x, lag, FUN)
-  dimnames(coefs) = list(tl_predvalues, paste(lag))
+  dimnames(coefs) = list(x, paste(lag))
   coefs
 }
-
 l_coefs = fw_funs %>% map(., ~calc_coefs(tl_predvalues, lag_seq, .)) %>% map(., ~exp(.))
+l_coefs_change = fw_funs_change %>% map(., ~calc_coefs(tl_predvalues_change, lag_seq, .)) %>% map(., ~exp(.))
+
+# figures of f*w functions for amount of training load
 persp(x = tl_predvalues, y = lag_seq, l_coefs[[1]], ticktype="detailed", theta=230, ltheta=150, phi=40, lphi=30,
       ylab="Lag (Days)", zlab="RR", shade=0.75, r=sqrt(3), d=5, cex.axis=0.7, cex.lab=0.8,
-      border=grey(0.2), col = nih_distinct[1], xlab = "sRPE")
+      border=grey(0.2), col = nih_distinct[1], xlab = "sRPE (AU)")
 
 persp(x = tl_predvalues, y = lag_seq, l_coefs[[2]], ticktype="detailed", theta=230, ltheta=150, phi=40, lphi=30,
       ylab="Lag (Days)", zlab="RR", shade=0.75, r=sqrt(3), d=5, cex.axis=0.7, cex.lab=0.8,
-      border=grey(0.2), col = nih_distinct[1], xlab = "sRPE")
+      border=grey(0.2), col = nih_distinct[1], xlab = "sRPE(AU)")
 
 persp(x = tl_predvalues, y = lag_seq, l_coefs[[3]], ticktype="detailed", theta=230, ltheta=150, phi=40, lphi=30,
       ylab="Lag (Days)", zlab="RR", shade=0.75, r=sqrt(3), d=5, cex.axis=0.7, cex.lab=0.8,
-      border=grey(0.2), col = nih_distinct[1], xlab = "sRPE")
+      border=grey(0.2), col = nih_distinct[1], xlab = "sRPE (AU)")
 
 persp(x = tl_predvalues, y = lag_seq, l_coefs[[4]], ticktype="detailed", theta=230, ltheta=150, phi=40, lphi=30,
       ylab="Lag (Days)", zlab="RR", shade=0.75, r=sqrt(3), d=5, cex.axis=0.7, cex.lab=0.8,
       border=grey(0.2), col = nih_distinct[1], xlab = "sRPE")
+
+# figures for change in load
+persp(x = tl_predvalues_change, y = lag_seq, l_coefs_change[[1]], ticktype="detailed", theta=230, ltheta=150, phi=40, lphi=30,
+      ylab="Lag (Days)", zlab="RR", shade=0.75, r=sqrt(3), d=5, cex.axis=0.7, cex.lab=0.8,
+      border=grey(0.2), col = nih_distinct[1], xlab = "ΔsRPE (AU)")
+
+persp(x = tl_predvalues_change, y = lag_seq, l_coefs_change[[2]], ticktype="detailed", theta=230, ltheta=150, phi=40, lphi=30,
+      ylab="Lag (Days)", zlab="RR", shade=0.75, r=sqrt(3), d=5, cex.axis=0.7, cex.lab=0.8,
+      border=grey(0.2), col = nih_distinct[1], xlab = "ΔsRPE (AU)")
+
+persp(x = tl_predvalues_change, y = lag_seq, l_coefs_change[[3]], ticktype="detailed", theta=230, ltheta=150, phi=40, lphi=30,
+      ylab="Lag (Days)", zlab="RR", shade=0.75, r=sqrt(3), d=5, cex.axis=0.7, cex.lab=0.8,
+      border=grey(0.2), col = nih_distinct[1], xlab = "ΔsRPE (AU)")
+
+
+dag0 = l_coefs_change[[1]][,1]
+plot(x = tl_predvalues_change, y = dag0)
 
 # simulate exposure histories
 # for nsub number of subjects
