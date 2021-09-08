@@ -430,7 +430,9 @@ ewma = function(x, n_days, window){
 # calc rolling average and ewma on training load amount
 d_sim_tl_hist_mod = d_sim_tl_hist %>% 
                 mutate(ra_t_load = ra(d_sim_tl_hist$t_load, 28),
-                ewma_t_load = ewma(d_sim_tl_hist$t_load, 28, 1))
+                ewma_t_load = ewma(d_sim_tl_hist$t_load, 28, 1)) %>% select(-starts_with("t_load"))
+
+l_survival_sim_basemethods = l_survival_sim %>% map(. %>% left_join(d_sim_tl_hist_mod, by = c("Id" = "id", "Stop" = "day")))
 
 # calculate 7:28 coupled ACWR using RA on training load amount (this becomes, in theory, a measure of change)
 # move 1 day at a time as advised in Carey et al. 2017
@@ -450,9 +452,13 @@ acute_mean = function(x){
   l
 }
 
-# The first 27 days of injuries need to be discarded for the first acute window
-# meaning that every athlete which has an event during the first 27 days have to be removed
-l_survival_sim_change_acwr = l_survival_sim_change %>% map(. %>% filter(Fup >= 27))
+# function calculating sums on a sliding window of 7 days
+weekly_sum = function(x){
+  l = slide(x, ~sum(.), .before = 6, step = 1, .complete =TRUE)
+  l = compact(l)
+  l = unlist(l)
+  l
+}
 
 # the first acute load can be calulated from day 22 to day 28
 # to have an equal number acute and chronic values
@@ -472,8 +478,36 @@ d_sim_hist_chronic = d_sim_hist_acwr_chronic_nested %>%
   unnest(cols = c(data)) %>% 
   mutate(day = rep(28:t_max, nsub))  %>% 
   rename(chronic_load = data)
-d_sim_hist_acwr = d_sim_hist_acute %>% left_join(d_sim_hist_chronic, by = c("id", "day")) %>% mutate(acwr = acute_load/chronic_load)
+d_sim_hist_acwr = d_sim_hist_acute %>% 
+                  left_join(d_sim_hist_chronic, by = c("id", "day")) %>% 
+                  mutate(acwr = acute_load/chronic_load)
 
+l_survival_sim_change_acwr = l_survival_sim_change %>% map(. %>% left_join(d_sim_hist_acwr %>% 
+                                                     select(-ends_with("load")), 
+                                                   by = c("Id" = "id", "Stop" = "day")))
+
+
+d_sim_hist_nested_weekly = d_sim_tl_hist %>% nest(data = c(t_load, day, t_load_change))
+d_sim_hist_nested_weekly$data = d_sim_hist_nested_weekly$data %>% map(., ~weekly_sum(.$t_load))
+
+# week to week change requires 2 full weeks before calculation
+# the sliding window thereafter jumps one day at a time
+# but the calculation is "uncoupled"
+d_sim_hist_weekly = d_sim_hist_nested_weekly %>% 
+  unnest(data) %>% 
+  rename(week_sum = data) %>% 
+  mutate(week_sum_lead = lead(week_sum, 7),
+         weekly_change = week_sum_lead-week_sum,
+         day = rep(7:t_max, nsub))
+
+# the difference can't be measured until a week after the first week
+d_sim_hist_weekly = d_sim_hist_weekly %>% 
+  select(-week_sum, -week_sum_lead) %>% 
+  group_by(id) %>% 
+  mutate(day = lead(day, 7)) %>% 
+  filter(!is.na(day)) %>% ungroup()
+l_survival_sim_change_basemethods = l_survival_sim_change_acwr %>% 
+                                      map(. %>% left_join(d_sim_hist_weekly, by = c("Id" = "id", "Stop" = "day")))
 
 
 # RUN THE MODEL, SAVING IT IN THE LIST WITH MINIMAL INFO (SAVE MEMORY)
