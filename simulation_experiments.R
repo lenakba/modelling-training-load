@@ -464,5 +464,32 @@ persp(x = tl_predvalues_change, y = lag_seq, pred_lin_decay$matRRfit, ticktype="
       ylab="Lag (Days)", zlab="HR", shade=0.75, r=sqrt(3), d=5, 
       border=grey(0.2), col = nih_distinct[1], xlab = "sRPE")
 
+library(ggeffects)
+preds_ra = ggpredict(l_fit_ra[[2]], terms= "ra_t_load [tl_predvalues]", type = "survival")
+ggplot(preds_ra, aes(x, predicted)) + geom_line()
 
+preds_ra[[3]]
 
+fit_ra = survfit(Surv(Start, Stop, Event) ~ ra_t_load, data = l_survival_sim_basemethods[[2]])
+class(fit_ra)
+
+library(survminer)
+ggsurvplot(
+  fit_ra,
+  size = 0.5,
+  # lines become thicker in the pdf version
+  conf.int = FALSE,
+  risk.table = FALSE,
+  tables.col = NULL,
+  palette = nih_distinct[4],
+  ggtheme = theme_line(), # from ostrc-package
+  censor = FALSE,
+  ylab = "",
+  xlab = "Days",
+  title = "Probability of Sports Injury",
+  tables.y.text = FALSE,
+  fontsize = 10,
+  axes.offset = FALSE,
+  break.x.by = 2
+)
+?ggsurvplot
