@@ -114,8 +114,13 @@ persp(x = tl_predvalues_change, y = lag_seq, l_coefs_change[[3]], ticktype="deta
       border=grey(0.2), col = nih_distinct[1], xlab = "ΔsRPE (AU)")
 
 
-dag0 = l_coefs_change[[1]][,1]
+dag0 = l_coefs_change[[2]][,1]
 plot(x = tl_predvalues_change, y = dag0)
+
+x500 = l_coefs_change[[2]][51,1:29]
+plot(x = lag_seq, y = x500)
+
+
 
 #################################################Simulating exposure histories###################################
 # simulate exposure histories
@@ -176,12 +181,12 @@ names_rels = c("constant", "decay", "exponential_decay")
 name_extra = "flin_direction_flip"
 
 # nest simulated dataset on each individual
-l_load_nested = d_sim_tl_hist %>% nest(data = c(day, t_load, t_load_change)) 
+l_load_nested = d_sim_tl_hist %>% group_by(id) %>% nest() 
 
 # calc cumulative effects for each function in flist matched to each function in wlist
 l_cumeffs = map2(.x = flist,
                  .y = wlist, 
-                 ~calc_cumeffs_all(l_load_nested, "amount", .x, .y))
+                 ~calc_cumeffs_all(l_load_nested, t_load_type = "amount", .x, .y))
 # add labels and collapse to dataset
 l_cumeffs = map2(.x = l_cumeffs,
                  .y = c(names_rels, name_extra), 
@@ -189,7 +194,7 @@ l_cumeffs = map2(.x = l_cumeffs,
 
 # do the same for change. the difference is that flin is used for all functions in wlist_change.
 l_cumeffs_change = wlist_change %>% 
-                   map(~calc_cumeffs_all(l_load_nested, "change", flin, .)) %>% 
+                   map(~calc_cumeffs_all(l_load_nested, t_load_type = "change", flin, .)) %>% 
                    map2(.x = .,
                         .y = names_rels, 
                         ~.x %>% mutate(relationship = paste0(.y)))
@@ -197,12 +202,13 @@ l_cumeffs_change = wlist_change %>%
 ########################################Simulate injuries based on cumulative effect of training load#####################
 l_cumeffs_mats = l_cumeffs %>% map(. %>% mutate(day = rep(1:t_max, nsub)) %>% 
                     pivot_wider(names_from = id, values_from = cumeff) %>% 
-                    select(-day, -relationship) %>% as.matrix)
+                    select(-relationship) %>% as.matrix)
 
-l_cumeffs_mats_change = l_cumeffs_change %>% map(. %>% mutate(day = lead(rep(1:t_max, nsub))) %>% 
-                                                   filter(!is.na(cumeff)) %>% 
-                           pivot_wider(names_from = id, values_from = cumeff) %>% 
-                           select(-day, -relationship) %>% as.matrix)
+l_cumeffs_mats_change = l_cumeffs_change %>% 
+                            map(. %>% mutate(day = lead(rep(1:t_max, nsub))) %>% 
+                            filter(!is.na(cumeff)) %>% 
+                            pivot_wider(names_from = id, values_from = cumeff) %>% 
+                            select(-relationship) %>% as.matrix)
 
 set.seed(1234)
 l_survival_sim = l_cumeffs_mats %>% map(., ~permalgorithm(nsub, t_max, Xmat = .,
@@ -267,101 +273,9 @@ d_sim_tl_hist_spread_day_change =
 l_q_matrices = l_survival_sim %>% map(., ~from_sim_surv_to_q(., d_sim_tl_hist_spread_day))
 l_q_matrices_change = l_survival_sim_change %>% map(., ~from_sim_surv_to_q(., d_sim_tl_hist_spread_day_change))
 
-#-------------------------------------------Sensitivity analysis to determine best model
-# sensitivity analysis
-# what combination of lag and var functions
-# have the best AIC for each of the Q matrices?
-knots = 3:6
-arglist_splines = knots %>% map(., ~list(fun="ns", knots = .))
-arglist_poly = list(list(fun="poly",degree=2))
-arglist_lin = list(list(fun = "lin"))
-
-arglist1 = append(arglist_splines, arglist_poly)
-arglist = append(arglist1, arglist_lin)
-
-# instead of making a list of lists, copy-paste
-# easier to keep head straight on permutations
-# this needs careful coding
-crossbasis_j_constant = arglist %>% 
-  map(., ~crossbasis(l_q_matrices[[1]],
-                     lag=c(lag_min, lag_max),
-                     argvar = list(fun="ns", knots = 3, intercept = FALSE),
-                     arglag = .))
-
-crossbasis_j_decay = arglist %>% 
-  map(., ~crossbasis(l_q_matrices[[2]],
-                     lag=c(lag_min, lag_max),
-                     argvar = list(fun="ns", knots = 3, intercept = FALSE),
-                     arglag = .))
-
-crossbasis_j_exponential_decay = arglist %>% 
-  map(., ~crossbasis(l_q_matrices[[3]],
-                     lag=c(lag_min, lag_max),
-                     argvar = list(fun="ns", knots = 3, intercept = FALSE),
-                     arglag = .))
-
-crossbasis_flin_direction_flip = arglist %>% 
-  map(., ~crossbasis(l_q_matrices[[4]],
-                     lag=c(lag_min, lag_max),
-                     argvar = list(fun="lin", intercept = FALSE),
-                     arglag = .))
-
 # need data on counting process form
 l_counting_survival_sim = l_survival_sim %>% map(., ~counting_process_form(.))
-
-names_dlnm_funs = c("splines_3", "splines_4", "splines_5", "splines_6", "poly2", "lin")
-names_truerel = c(names_rels, name_extra)
-aic_vec = c()
-for(i in 1:length(arglist)){
-  surfit_j_constant = coxph(Surv(enter, exit, event) ~ crossbasis_j_constant[[i]], l_counting_survival_sim[[1]], y = FALSE, ties = "efron")
-  surfit_j_decay = coxph(Surv(enter, exit, event) ~ crossbasis_j_decay[[i]], l_counting_survival_sim[[2]], y = FALSE, ties = "efron")
-  survfit_j_exponential_decay = coxph(Surv(enter, exit, event) ~ crossbasis_j_exponential_decay[[i]], l_counting_survival_sim[[3]], y = FALSE, ties = "efron")
-  survfit_lin_direction_flip = coxph(Surv(enter, exit, event) ~ crossbasis_flin_direction_flip[[i]], l_counting_survival_sim[[4]], y = FALSE, ties = "efron")
-  aic = c(AIC(surfit_j_constant), AIC(surfit_j_decay), AIC(survfit_j_exponential_decay), AIC(survfit_lin_direction_flip))
-  aic_vec = append(aic_vec, aic)
-}
-
-d_aic_amount_load = enframe(aic_vec, name = NULL) %>% 
-                    mutate(fun_names = rep(names_dlnm_funs, each = 4), 
-                           true_rels = rep(names_truerel, length(arglist))) %>% rename(aic = value)
-best_aics_tl_amount = d_aic_amount_load %>% group_by(true_rels) %>% filter(aic == min(aic))
-
-#--------------------do the same for change in load
-
-crossbasis_lin_constant = arglist %>% 
-  map(., ~crossbasis(l_q_matrices_change[[1]],
-                     lag=c(lag_min, lag_max),
-                     argvar = list(fun="lin"),
-                     arglag = .))
-
-crossbasis_lin_decay = arglist %>% 
-  map(., ~crossbasis(l_q_matrices_change[[2]],
-                     lag=c(lag_min, lag_max),
-                     argvar = list(fun="lin"),
-                     arglag = .))
-
-crossbasis_lin_exponential_decay = arglist %>% 
-  map(., ~crossbasis(l_q_matrices_change[[3]],
-                     lag=c(lag_min, lag_max),
-                     argvar = list(fun="lin"),
-                     arglag = .))
-
-# need data on counting process form
 l_counting_survival_sim_change = l_survival_sim_change %>% map(., ~counting_process_form(.))
-aic_vec_change = c()
-for(i in 1:length(arglist)){
-  survfit_lin_constant = coxph(Surv(enter, exit, event) ~ crossbasis_lin_constant[[i]], l_counting_survival_sim_change[[1]], y = FALSE, ties = "efron")
-  survfit_lin_decay = coxph(Surv(enter, exit, event) ~ crossbasis_lin_decay[[i]], l_counting_survival_sim_change[[2]], y = FALSE, ties = "efron")
-  survfit_lin_exponential_decay = coxph(Surv(enter, exit, event) ~ crossbasis_lin_exponential_decay[[i]], l_counting_survival_sim_change[[3]], y = FALSE, ties = "efron")
-  aic_change = c(AIC(survfit_lin_constant), AIC(survfit_lin_decay), AIC(survfit_lin_exponential_decay))
-  aic_vec_change = append(aic_vec_change, aic_change)
-}
-
-d_aic_change_load = enframe(aic_vec_change, name = NULL) %>% 
-                    mutate(fun_names = rep(names_dlnm_funs, each = 3), 
-                    true_rels = rep(names_rels, length(arglist))) %>% rename(aic = value)
-best_aics_tl_change = d_aic_change_load %>% group_by(true_rels) %>% filter(aic == min(aic))
-
 
 
 ####################################### Modify training load with different methods ####################################
@@ -483,17 +397,19 @@ l_crossbases_amount = map2(.x = l_q_matrices,
                             argvar = list(fun="ns", knots = 3, intercept = FALSE),
                             arglag = list(fun="ns", knots = 3, intercept = FALSE)))
 
-l_fit_dlnm_amount = map2(.x = l_counting_survival_sim,
-                         .y = l_crossbases_amount,
-                         ~coxph(Surv(enter, exit, event) ~ .y, 
-                                .x, y = FALSE, ties = "efron"))
-
 l_crossbases_change = map2(.x = l_q_matrices_change,
                            .y = arglist_final_change,
                            ~crossbasis(.x,
                                        lag=c(lag_min, lag_max),
                                        argvar = list(fun="lin", intercept = FALSE),
                                        arglag = .y))
+
+
+l_fit_dlnm_amount = map2(.x = l_counting_survival_sim,
+                         .y = l_crossbases_amount,
+                         ~coxph(Surv(enter, exit, event) ~ .y, 
+                                .x, y = FALSE, ties = "efron"))
+
 
 l_fit_dlnm_change = map2(.x = l_counting_survival_sim_change,
                          .y = l_crossbases_change,
