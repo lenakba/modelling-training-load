@@ -481,7 +481,7 @@ l_crossbases_amount = map2(.x = l_q_matrices,
                            ~crossbasis(.x,
                             lag=c(lag_min, lag_max),
                             argvar = list(fun="ns", knots = 3, intercept = FALSE),
-                            arglag = .y))
+                            arglag = list(fun="ns", knots = 3, intercept = FALSE)))
 
 l_fit_dlnm_amount = map2(.x = l_counting_survival_sim,
                          .y = l_crossbases_amount,
@@ -502,21 +502,34 @@ l_fit_dlnm_change = map2(.x = l_counting_survival_sim_change,
 
 # RUN THE MODEL, SAVING IT IN THE LIST WITH MINIMAL INFO (SAVE MEMORY)
 
-aic_j_decay_ra = AIC(l_fit_ra[[3]])
-aic_j_decay_ewma = AIC(l_fit_ewma[[3]])
-aic_j_decay_dlnm = AIC(l_fit_dlnm_amount[[3]])
+aic_j_decay_ra = AIC(l_fit_ra[[2]])
+aic_j_decay_ewma = AIC(l_fit_ewma[[2]])
+aic_j_decay_dlnm = AIC(l_fit_dlnm_amount[[2]])
 
-aic_lin_decay_acwr = AIC(l_fit_acwr[[3]])
-aic_lin_decay_weekly_change = AIC(l_fit_weekly_change[[3]])
-aic_lin_decay_dlnm = AIC(l_fit_dlnm_change[[3]])
-
-
-# OBTAIN THE PREDICTED RISK FOR A SEQUENCE OF TL LEVELS
-pred_j_decay = crosspred(l_crossbases_amount[[2]], l_fit_dlnm_amount[[2]], at = tl_predvalues, cen = 300, cumul = TRUE)
-
-pred_lin_decay = crosspred(l_crossbases_change[[2]], l_fit_dlnm_change[[2]], at = tl_predvalues_change, cen = 0, cumul = TRUE)
+aic_lin_decay_acwr = AIC(l_fit_acwr[[2]])
+aic_lin_decay_weekly_change = AIC(l_fit_weekly_change[[2]])
+aic_lin_decay_dlnm = AIC(l_fit_dlnm_change[[2]])
 
 # 3D GRAPHS OF PREDICTED VALUES FOR ASSESSING MODEL FIT
+cb_j_decay = crossbasis(l_q_matrices[[2]],
+                        lag=c(lag_min, lag_max),
+                        argvar = list(fun="ns", knots = 3, intercept = FALSE),
+                        arglag = list(fun="ns", knots = 3))
+
+mod_j_decay = coxph(Surv(enter, exit, event) ~ cb_j_decay, l_counting_survival_sim[[2]], y = FALSE, ties = "efron")
+
+
+cb_lin_decay = crossbasis(l_q_matrices_change[[2]],
+                        lag=c(lag_min, lag_max),
+                        argvar = list(fun="ns", knots = 3, intercept = FALSE),
+                        arglag = list(fun="ns", knots = 3))
+
+mod_lin_decay = coxph(Surv(enter, exit, event) ~ cb_lin_decay, l_counting_survival_sim_change[[2]], y = FALSE, ties = "efron")
+
+# OBTAIN THE PREDICTED RISK FOR A SEQUENCE OF TL LEVELS
+pred_j_decay = crosspred(cb_j_decay, mod_j_decay, at = tl_predvalues, cen = 300, cumul = TRUE)
+pred_lin_decay = crosspred(cb_lin_decay, mod_lin_decay, at = tl_predvalues_change, cen = 0, cumul = TRUE)
+
 
 # j decay
 persp(x = tl_predvalues, y = lag_seq, l_coefs[[2]], ticktype="detailed", theta=230, ltheta=150, phi=40, lphi=30,
@@ -527,11 +540,11 @@ persp(x = tl_predvalues, y = lag_seq, pred_j_decay$matRRfit, ticktype="detailed"
       ylab="Lag (Days)", zlab="HR", shade=0.75, r=sqrt(3), d=5,
       border=grey(0.2), col = nih_distinct[1], xlab = "sRPE")
 
-persp(x = tl_predvalues, y = lag_seq, l_coefs[[1]], ticktype="detailed", theta=230, ltheta=150, phi=40, lphi=30,
+persp(x = tl_predvalues_change, y = lag_seq, l_coefs_change[[2]], ticktype="detailed", theta=230, ltheta=150, phi=40, lphi=30,
       ylab="Lag (Days)", zlab="HR", shade=0.75, r=sqrt(3), d=5,
       border=grey(0.2), col = nih_distinct[1], xlab = "sRPE")
 
-persp(x = tl_predvalues, y = lag_seq, pred_lin_decay$matRRfit, ticktype="detailed", theta=230, ltheta=150, phi=40, lphi=30,
+persp(x = tl_predvalues_change, y = lag_seq, pred_lin_decay$matRRfit, ticktype="detailed", theta=230, ltheta=150, phi=40, lphi=30,
       ylab="Lag (Days)", zlab="HR", shade=0.75, r=sqrt(3), d=5, 
       border=grey(0.2), col = nih_distinct[1], xlab = "sRPE")
 
