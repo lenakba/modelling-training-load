@@ -208,14 +208,14 @@ l_cumeffs_change = wlist_change %>%
 
 # calculate cumulative effect of training load for each individual,
 # as a cross-basis of a function f or exposure amount, and function w, lag-time
-l_load_nested = d_sim_tl_hist %>% nest(data = c(day, t_load, t_load_change)) 
-l_load_nested$data = l_load_nested$data %>% map(~calc_cumeff(.$t_load, fj, wdecay))
-d_load_cumeffs_j_decay = unnest(l_load_nested, cols = c(data)) %>% rename(cumeff = data)
+# l_load_nested = d_sim_tl_hist %>% nest(data = c(day, t_load, t_load_change)) 
+# l_load_nested$data = l_load_nested$data %>% map(~calc_cumeff(.$t_load, fj, wdecay))
+# d_load_cumeffs_j_decay = unnest(l_load_nested, cols = c(data)) %>% rename(cumeff = data)
 
 # to have 2 examples
-l_load_nested = d_sim_tl_hist %>% nest(data = t_load) 
-l_load_nested$data = l_load_nested$data %>% map(~calc_cumeff(.$t_load, flin, wdecay))
-d_load_cumeffs_lin_decay = unnest(l_load_nested, cols = c(data)) %>% rename(cumeff = data)
+# l_load_nested = d_sim_tl_hist %>% nest(data = t_load) 
+# l_load_nested$data = l_load_nested$data %>% map(~calc_cumeff(.$t_load, flin, wdecay))
+# d_load_cumeffs_lin_decay = unnest(l_load_nested, cols = c(data)) %>% rename(cumeff = data)
 
 ########################################Simulate injuries based on cumulative effect of training load#####################
 l_cumeffs_mats = l_cumeffs %>% map(. %>% mutate(day = rep(1:t_max, nsub)) %>% 
@@ -236,29 +236,29 @@ l_survival_sim_change = l_cumeffs_mats_change %>% map(., ~permalgorithm(nsub, t_
 
 
 # arrange in a matrix which will be used later
-cumeff_j_decay = l_cumeffs[[2]]
-cumeff_lin_decay = l_cumeffs_change[[2]]
-cumeff_j_decay_i = 
-  d_load_cumeffs_j_decay %>% mutate(day = rep(1:t_max, nsub)) %>% 
-  pivot_wider(names_from = id, values_from = cumeff) %>% select(-day) %>% as.matrix
-
-cumeff_lin_decay_i = 
-  d_load_cumeffs_lin_decay %>% mutate(day = rep(1:t_max, nsub)) %>% 
-  pivot_wider(names_from = id, values_from = cumeff) %>% select(-day) %>% as.matrix
+# cumeff_j_decay = l_cumeffs[[2]]
+# cumeff_lin_decay = l_cumeffs_change[[2]]
+# cumeff_j_decay_i = 
+#   d_load_cumeffs_j_decay %>% mutate(day = rep(1:t_max, nsub)) %>% 
+#   pivot_wider(names_from = id, values_from = cumeff) %>% select(-day) %>% as.matrix
+# 
+# cumeff_lin_decay_i = 
+#   d_load_cumeffs_lin_decay %>% mutate(day = rep(1:t_max, nsub)) %>% 
+#   pivot_wider(names_from = id, values_from = cumeff) %>% select(-day) %>% as.matrix
 
 # simulate survival times and events for each participant
 # set the beta-coefficient to be 1, as in 1 times the cumeffect provided in the matrix
 # set censoring probability to 0.10
 # use cumulative effect as the time-dependent variable
-set.seed(1234)
-d_sim_surv_j_decay = permalgorithm(nsub, t_max, Xmat = cumeff_j_decay_i,
-                      censorRandom = runif(nsub, 1, t_max*2), betas=1)
-
-d_sim_surv_lin_decay = permalgorithm(nsub, t_max, Xmat = cumeff_lin_decay_i,
-                                   censorRandom = runif(nsub, 1, t_max*2),betas=1)
-
-d_sim_surv_j_decay %>% summarise(n_events = sum(Event == 1))
-d_sim_surv_lin_decay %>% summarise(n_events = sum(Event == 1))
+# set.seed(1234)
+# d_sim_surv_j_decay = permalgorithm(nsub, t_max, Xmat = cumeff_j_decay_i,
+#                       censorRandom = runif(nsub, 1, t_max*2), betas=1)
+# 
+# d_sim_surv_lin_decay = permalgorithm(nsub, t_max, Xmat = cumeff_lin_decay_i,
+#                                    censorRandom = runif(nsub, 1, t_max*2),betas=1)
+# 
+# d_sim_surv_j_decay %>% summarise(n_events = sum(Event == 1))
+# d_sim_surv_lin_decay %>% summarise(n_events = sum(Event == 1))
 
 ########################################Define the crossbasis for the DLNM method#####################
 
@@ -414,6 +414,9 @@ best_aics_tl_change = d_aic_change_load %>% group_by(true_rels) %>% filter(aic =
 
 
 ####################################### Running the different models of training load ####################################
+
+# Perform the typical methods for handling training load amount: rolling average and EWMA
+
 # Function for calculating rolling averages on a chooseable number of days
 # Based on rollapplyr, not rollmean, as rollmean will only start calculating averages
 # at n values, while rollapplyr allows the user to decide preliminary values.
@@ -433,6 +436,8 @@ d_sim_tl_hist_mod = d_sim_tl_hist %>%
                 ewma_t_load = ewma(d_sim_tl_hist$t_load, 28, 1)) %>% select(-starts_with("t_load"))
 
 l_survival_sim_basemethods = l_survival_sim %>% map(. %>% left_join(d_sim_tl_hist_mod, by = c("Id" = "id", "Stop" = "day")))
+
+# Perform typical methods for handling change in training load, ACWR and week-to-week change
 
 # calculate 7:28 coupled ACWR using RA on training load amount (this becomes, in theory, a measure of change)
 # move 1 day at a time as advised in Carey et al. 2017
@@ -460,45 +465,33 @@ weekly_sum = function(x){
   l
 }
 
+# function to nest the exposure history data by each individual, 
+# and run a user-specified function on each of their datasets in the list
+function_on_list = function(d_sim_hist, FUN = NULL, day_start){
+  nested_list = d_sim_hist %>% nest(data = c(t_load, day, t_load_change))
+  nested_list$data = nested_list$data %>% map(., ~FUN(.$t_load))
+  l_unnest = unnest(nested_list, cols = c(data)) %>% mutate(day = rep(day_start:t_max, nsub)) 
+  l_unnest
+}
+
 # the first acute load can be calulated from day 22 to day 28
 # to have an equal number acute and chronic values
 d_sim_tl_hist_acwr_acute = d_sim_tl_hist %>% filter(day >= 22)
+d_sim_hist_acute = function_on_list(d_sim_tl_hist_acwr_acute, FUN = acute_mean, 28) %>% rename(acute_load = data)
+d_sim_hist_chronic = function_on_list(d_sim_tl_hist, FUN = chronic_ra, 28) %>% rename(chronic_load = data)
 
-d_sim_hist_acwr_acute_nested = d_sim_tl_hist_acwr_acute %>% nest(data = c(t_load, day, t_load_change))
-d_sim_hist_acwr_chronic_nested = d_sim_tl_hist %>% nest(data = c(t_load, day, t_load_change))
-
-d_sim_hist_acwr_acute_nested$data = d_sim_hist_acwr_acute_nested$data %>% map(., ~acute_mean(.$t_load))
-d_sim_hist_acwr_chronic_nested$data = d_sim_hist_acwr_chronic_nested$data %>% map(., ~chronic_ra(.$t_load))
-
-d_sim_hist_acute = d_sim_hist_acwr_acute_nested %>% 
-  unnest(cols = c(data)) %>% 
-  mutate(day = rep(28:t_max, nsub)) %>% 
-  rename(acute_load = data)
-d_sim_hist_chronic = d_sim_hist_acwr_chronic_nested %>% 
-  unnest(cols = c(data)) %>% 
-  mutate(day = rep(28:t_max, nsub))  %>% 
-  rename(chronic_load = data)
+# calculate the ACWR be acute/chronic
 d_sim_hist_acwr = d_sim_hist_acute %>% 
-                  left_join(d_sim_hist_chronic, by = c("id", "day")) %>% 
-                  mutate(acwr = acute_load/chronic_load)
-
-l_survival_sim_change_acwr = l_survival_sim_change %>% map(. %>% left_join(d_sim_hist_acwr %>% 
-                                                     select(-ends_with("load")), 
-                                                   by = c("Id" = "id", "Stop" = "day")))
-
-
-d_sim_hist_nested_weekly = d_sim_tl_hist %>% nest(data = c(t_load, day, t_load_change))
-d_sim_hist_nested_weekly$data = d_sim_hist_nested_weekly$data %>% map(., ~weekly_sum(.$t_load))
+  left_join(d_sim_hist_chronic, by = c("id", "day")) %>% 
+  mutate(acwr = acute_load/chronic_load)
 
 # week to week change requires 2 full weeks before calculation
 # the sliding window thereafter jumps one day at a time
 # but the calculation is "uncoupled"
-d_sim_hist_weekly = d_sim_hist_nested_weekly %>% 
-  unnest(data) %>% 
-  rename(week_sum = data) %>% 
-  mutate(week_sum_lead = lead(week_sum, 7),
-         weekly_change = week_sum_lead-week_sum,
-         day = rep(7:t_max, nsub))
+d_sim_hist_weekly = function_on_list(d_sim_tl_hist, FUN = weekly_sum, 7) %>% 
+                                     rename(week_sum = data) %>% 
+                                     mutate(week_sum_lead = lead(week_sum, 7),
+                                     weekly_change = week_sum_lead-week_sum)
 
 # the difference can't be measured until a week after the first week
 d_sim_hist_weekly = d_sim_hist_weekly %>% 
@@ -506,8 +499,16 @@ d_sim_hist_weekly = d_sim_hist_weekly %>%
   group_by(id) %>% 
   mutate(day = lead(day, 7)) %>% 
   filter(!is.na(day)) %>% ungroup()
+
+# couple survival data with change in load data
+l_survival_sim_change_acwr = l_survival_sim_change %>% 
+                             map(. %>% left_join(d_sim_hist_acwr %>% 
+                                                 select(-ends_with("load")), 
+                                                 by = c("Id" = "id", "Stop" = "day")))
+
 l_survival_sim_change_basemethods = l_survival_sim_change_acwr %>% 
-                                      map(. %>% left_join(d_sim_hist_weekly, by = c("Id" = "id", "Stop" = "day")))
+                                      map(. %>% left_join(d_sim_hist_weekly, 
+                                          by = c("Id" = "id", "Stop" = "day")))
 
 
 # RUN THE MODEL, SAVING IT IN THE LIST WITH MINIMAL INFO (SAVE MEMORY)
