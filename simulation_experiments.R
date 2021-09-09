@@ -22,7 +22,7 @@ t_max = 300 # number of days (length of study)
 
 # observed values
 tl_observed = (d_load %>% filter(srpe <= 1200))$srpe
-tl_observed_change = 2 - tl_observed
+tl_observed_change = lead(tl_observed) - tl_observed
 tl_observed_change = tl_observed_change[-length(tl_observed_change)]
 tl_valid = min(tl_observed):max(tl_observed)
 # lag set at 4 weeks (28) as is often used in tl studies
@@ -467,21 +467,73 @@ map_cox = function(l_sim_surv, var){
   var = enexpr(var)
   eval_bare(expr(l_sim_surv %>% map(., ~coxph(Surv(Start, Stop, Event) ~ !!var, ., y = FALSE, ties = "efron"))))
 }
-
 l_fit_ra = map_cox(l_survival_sim_basemethods, ra_t_load)
 l_fit_ewma = map_cox(l_survival_sim_basemethods, ewma_t_load)
-
 l_fit_acwr = map_cox(l_survival_sim_change_basemethods, acwr)
 l_fit_weekly_change = map_cox(l_survival_sim_change_basemethods, weekly_change)
 
+# amount, 1 is j_constant, 2 j_decay, 3 j_exponential_decay, 4 lin_direction_flip
+# change, 1 is lin_constant, 2 lin_decay, 3 lin_exponential_decay
+arglist_final = list(list(fun = "lin"), list(fun = "lin"), list(fun="ns", knots = 3), list(fun="ns", knots = 6))
+arglist_final_change = list(list(fun = "lin"), list(fun = "lin"), list(fun="ns", knots = 3))
+l_crossbases_amount = map2(.x = l_q_matrices,
+                           .y = arglist_final,
+                           ~crossbasis(.x,
+                            lag=c(lag_min, lag_max),
+                            argvar = list(fun="ns", knots = 3, intercept = FALSE),
+                            arglag = .y))
+
+l_fit_dlnm_amount = map2(.x = l_counting_survival_sim,
+                         .y = l_crossbases_amount,
+                         ~coxph(Surv(enter, exit, event) ~ .y, 
+                                .x, y = FALSE, ties = "efron"))
+
+l_crossbases_change = map2(.x = l_q_matrices_change,
+                           .y = arglist_final_change,
+                           ~crossbasis(.x,
+                                       lag=c(lag_min, lag_max),
+                                       argvar = list(fun="lin", intercept = FALSE),
+                                       arglag = .y))
+
+l_fit_dlnm_change = map2(.x = l_counting_survival_sim_change,
+                         .y = l_crossbases_change,
+                         ~coxph(Surv(enter, exit, event) ~ .y, 
+                                .x, y = FALSE, ties = "efron"))
+
 # RUN THE MODEL, SAVING IT IN THE LIST WITH MINIMAL INFO (SAVE MEMORY)
-modellist = list()
-modellist[[1]] = coxph(Surv(enter, exit, event) ~ cb_j_decay, dataspl_j_decay, y = FALSE, ties = "efron")
-modellist[[2]] = coxph(Surv(enter, exit, event) ~ cb_lin_decay, dataspl_lin_decay, y = FALSE, ties = "efron")
-mod_j_decay = modellist[[1]]
-mod_lin_decay = modellist[[2]]
-AIC(mod_j_decay)
-AIC(mod_lin_decay)
+
+aic_j_decay_ra = AIC(l_fit_ra[[3]])
+aic_j_decay_ewma = AIC(l_fit_ewma[[3]])
+aic_j_decay_dlnm = AIC(l_fit_dlnm_amount[[3]])
+
+aic_lin_decay_acwr = AIC(l_fit_acwr[[3]])
+aic_lin_decay_weekly_change = AIC(l_fit_weekly_change[[3]])
+aic_lin_decay_dlnm = AIC(l_fit_dlnm_change[[3]])
+
+
+# OBTAIN THE PREDICTED RISK FOR A SEQUENCE OF TL LEVELS
+pred_j_decay = crosspred(l_crossbases_amount[[2]], l_fit_dlnm_amount[[2]], at = tl_predvalues, cen = 300, cumul = TRUE)
+
+pred_lin_decay = crosspred(l_crossbases_change[[2]], l_fit_dlnm_change[[2]], at = tl_predvalues_change, cen = 0, cumul = TRUE)
+
+# 3D GRAPHS OF PREDICTED VALUES FOR ASSESSING MODEL FIT
+
+# j decay
+persp(x = tl_predvalues, y = lag_seq, l_coefs[[2]], ticktype="detailed", theta=230, ltheta=150, phi=40, lphi=30,
+      ylab="Lag (Days)", zlab="HR", shade=0.75, r=sqrt(3), d=5,
+      border=grey(0.2), col = nih_distinct[1], xlab = "sRPE")
+
+persp(x = tl_predvalues, y = lag_seq, pred_j_decay$matRRfit, ticktype="detailed", theta=230, ltheta=150, phi=40, lphi=30,
+      ylab="Lag (Days)", zlab="HR", shade=0.75, r=sqrt(3), d=5,
+      border=grey(0.2), col = nih_distinct[1], xlab = "sRPE")
+
+persp(x = tl_predvalues, y = lag_seq, l_coefs[[1]], ticktype="detailed", theta=230, ltheta=150, phi=40, lphi=30,
+      ylab="Lag (Days)", zlab="HR", shade=0.75, r=sqrt(3), d=5,
+      border=grey(0.2), col = nih_distinct[1], xlab = "sRPE")
+
+persp(x = tl_predvalues, y = lag_seq, pred_lin_decay$matRRfit, ticktype="detailed", theta=230, ltheta=150, phi=40, lphi=30,
+      ylab="Lag (Days)", zlab="HR", shade=0.75, r=sqrt(3), d=5, 
+      border=grey(0.2), col = nih_distinct[1], xlab = "sRPE")
 
 
 
