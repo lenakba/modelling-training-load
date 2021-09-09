@@ -21,7 +21,7 @@ t_max = 300 # number of days (length of study)
 
 # observed values
 tl_observed = (d_load %>% filter(srpe <= 1200))$srpe
-tl_observed_change = 2 - tl_observed
+tl_observed_change = lead(tl_observed) - tl_observed
 tl_observed_change = tl_observed_change[-length(tl_observed_change)]
 tl_valid = min(tl_observed):max(tl_observed)
 # lag set at 4 weeks (28) as is often used in tl studies
