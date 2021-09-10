@@ -141,7 +141,7 @@ sim_tl_history = function(nsub, t_max, tl_values){
 }
 
 set.seed(1234)
-sim_tl_history(nsub, t_max, tl_valid)
+d_sim_tl_hist = sim_tl_history(nsub, t_max, tl_valid)
 
 #############################Calculate cumulative effect of training load given exposure histories#######################
 
@@ -367,61 +367,65 @@ cox_basis = function(d_sim_surv, basis){
 fit_ra = cox_basis(d_survival_sim_cpform_mods, ob_ra)
 fit_ewma = cox_basis(d_survival_sim_cpform_mods, ob_ewma)
 fit_dlnm = cox_basis(d_survival_sim_cpform_mods, cb_dlnm)
+
+################################################## Calculate numeric performance measures ############################
   
-AIC(fit_ra)
-AIC(fit_ewma)
-AIC(fit_dlnm)  
+aic_ra = AIC(fit_ra)
+aic_ewma = AIC(fit_ewma)
+aic_dlnm = AIC(fit_dlnm)  
 
-preds_ra = crosspred(ob_ra, fit_ra, at = tl_predvalues, cen=500)
-preds_ewma = crosspred(ob_ewma, fit_ewma, at = tl_predvalues, cen=500)
-preds_dlnm = crosspred(cb_dlnm, fit_dlnm, at = tl_predvalues, cen=500)
+tl_predvalues_ra = seq(min(d_survival_sim_cpform_mods$ra_t_load), max(d_survival_sim_cpform_mods$ra_t_load), 25) 
+tl_predvalues_ewma = seq(min(d_survival_sim_cpform_mods$ewma_t_load), max(d_survival_sim_cpform_mods$ewma_t_load), 25)
 
-# STORE THE RESULTS FOR OVERALL CUMULATIVE SUMMARY
-cumpredsens = cumpredsens + preds_dlnm$allfit
-cumbiassens = cumbiassens + (preds_dlnm$allfit - truecumsens)
-cumcovsens = cumcovsens + (truecumsens >= preds_dlnm$allfit-qn*preds_dlnm$allse & truecumsens <= preds_dlnm$allfit+qn*preds_dlnm$allse)
-cumrmsesens =  cumrmsesens + (preds_dlnm$allfit - truecumsens)^2
+cp_preds_ra = crosspred(ob_ra, fit_ra, at = tl_predvalues)
+cp_preds_ewma = crosspred(ob_ewma, fit_ewma, at = tl_predvalues)
+cp_preds_dlnm = crosspred(cb_dlnm, fit_dlnm, at = tl_predvalues)
+
+truecumcoefs = rowSums(calc_cumsum_coefs(tl_predvalues, fjdecay))
+
+cumeff_preds_ra = cp_preds_ra$allfit
+cumeff_preds_ewma = cp_preds_ewma$allfit
+cumeff_preds_dlnm = cp_preds_dlnm$allfit
+
+#bias_dlnm = cumeff_preds_dlnm - truecumcoefs
+
+coverage = function(estimate, target, se){
+  qn = qnorm(0.95)  
+  coef_high = estimate + qn*se
+  coef_low = estimate - qn*se
+  coverage = target <= coef_high & target >= coef_low
+  numerator = sum(coverage == TRUE)
+  denominator = length(coverage)
+  coverage_prop = numerator/denominator
+  coverage_prop
+}
+
+coverage_ra = coverage(cumeff_preds_ra, truecumcoefs, cp_preds_ra$allse)
+coverage_ewma = coverage(cumeff_preds_ewma, truecumcoefs, cp_preds_ewma$allse)
+coverage_dlnm = coverage(cumeff_preds_dlnm, truecumcoefs, cp_preds_dlnm$allse)
+
+average_width = function(estimate, target, se){
+  qn = qnorm(0.95)  
+  coef_high = estimate + qn*se
+  coef_low = estimate - qn*se
+  aw = mean(coef_high-coef_low)
+  aw
+}
+
+aw_ra = average_width(cumeff_preds_ra, truecumcoefs, cp_preds_ra$allse)
+aw_ewma = average_width(cumeff_preds_ewma, truecumcoefs, cp_preds_ewma$allse)
+aw_dlnm = average_width(cumeff_preds_dlnm, truecumcoefs, cp_preds_dlnm$allse)
 
 # Root-mean-squared-error
 rmse = function(estimate, target){
   sqrt(mean((estimate - target)^2)) 
 }
 
-#function for obtaining root mean squared error RMSE
-rmse = function(fit){
-  rmse = sqrt(mean(fit$residuals^2))
-  rmse
-}
+rmse_ra = rmse(cumeff_preds_ra, truecumcoefs)
+rmse_ewma = rmse(cumeff_preds_ewma, truecumcoefs)
+rmse_dlnm = rmse(cumeff_preds_dlnm, truecumcoefs)
 
-rmse(l_fit_ra[[2]])
-rmse(l_fit_ewma[[2]])
-rmse(l_fit_dlnm_amount[[2]])
-
-parameters::parameters(l_fit_ra[[2]])
-parameters::parameters(l_fit_ewma[[2]])
-parameters::parameters(l_fit_dlnm_amount[[2]])
-
-# function for obtaining parameters from any model fit
-# specify method for a column with the model-type
-get_params = function(fit, method){
-  d_params = parameters::parameters(fit) %>% tibble()
-  d_params = d_params %>% mutate(method = method, 
-                                 rmse = rmse(fit))
-  d_params
-}
-
-#function for obtaining c-statistics and brier score
-validation_stats = function(l_fit, injury, l_data){
-  injury = enexpr(injury)
-  brier = map2(.x = l_fit, .y = l_data, ~DescTools::BrierScore(pred=predict(.x, type="response"), resp = .y %>% dplyr::select(!!injury) %>% pull())) %>% 
-    map(., . %>% enframe(name = NULL, value = "brier"))
-  c_statistics = map2(.x = l_fit, .y = l_data, ~DescTools::Cstat(x=predict(.x, type="response"), resp = .y %>% dplyr::select(!!injury) %>% pull())) %>% 
-    map(., . %>% enframe(name = NULL, value = "c_stat"))
-  validation_stats = map2(.x = brier, .y = c_statistics, ~.x %>% mutate(c_stat = .y$c_stat))
-  validation_stats
-}
-
-# 3D GRAPHS OF PREDICTED VALUES FOR ASSESSING MODEL FIT
+######################################################## 3D GRAPHS OF PREDICTED VALUES FOR ASSESSING MODEL FIT
 cb_j_decay = crossbasis(l_q_matrices[[2]],
                         lag=c(lag_min, lag_max),
                         argvar = list(fun="ns", knots = 3, intercept = FALSE),
