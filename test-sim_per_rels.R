@@ -250,18 +250,8 @@ d_sim_tl_hist_spread_day =
   d_sim_tl_hist %>% select(-t_load_change) %>% 
   pivot_wider(names_from = day, values_from = t_load) %>% select(-id) %>% as.matrix
 
-d_sim_tl_hist_spread_day_change = 
-  d_sim_tl_hist %>% select(-t_load) %>%
-  pivot_wider(names_from = day, values_from = t_load_change) %>% select(-id) %>% as.matrix
-
-# list of q-matrices
-l_q_matrices = l_survival_sim %>% map(., ~from_sim_surv_to_q(., d_sim_tl_hist_spread_day))
-l_q_matrices_change = l_survival_sim_change %>% map(., ~from_sim_surv_to_q(., d_sim_tl_hist_spread_day_change))
-
-# need data on counting process form
-l_counting_survival_sim = l_survival_sim %>% map(., ~counting_process_form(.))
-l_counting_survival_sim_change = l_survival_sim_change %>% map(., ~counting_process_form(.))
-
+d_survival_sim_cpform = counting_process_form(d_survival_sim)
+q_mat = from_sim_surv_to_q(d_survival_sim, d_sim_tl_hist_spread_day)
 
 ####################################### Modify training load with different methods ####################################
 
@@ -281,11 +271,15 @@ ewma = function(x, n_days, window){
 }
 
 # calc rolling average and ewma on training load amount
-d_sim_tl_hist_mod = d_sim_tl_hist %>% 
+d_sim_tl_hist = d_sim_tl_hist %>% 
   mutate(ra_t_load = ra(d_sim_tl_hist$t_load, 28),
-         ewma_t_load = ewma(d_sim_tl_hist$t_load, 28, 1)) %>% select(-starts_with("t_load"))
-
-l_survival_sim_basemethods = l_survival_sim %>% map(. %>% left_join(d_sim_tl_hist_mod, by = c("Id" = "id", "Stop" = "day")))
+         ewma_t_load = ewma(d_sim_tl_hist$t_load, 28, 1))
+d_survival_sim_cpform_mods = d_survival_sim_cpform %>% left_join(d_sim_tl_hist, by = c("id", "exit" = "day"))
+ob_ra = onebasis(d_survival_sim_cpform_mods$ra_t_load, "ns", knots = 3)
+ob_ewma = onebasis(d_survival_sim_cpform_mods$ewma_t_load, "ns", knots = 3)
+cb_dlnm = crossbasis(q_mat, lag=c(lag_min, lag_max), 
+                     argvar = list(fun="ns", knots = 3),
+                     arglag = list(fun="ns", knots = 3))
 
 # Perform typical methods for handling change in training load, ACWR and week-to-week change
 
@@ -351,65 +345,42 @@ d_sim_hist_weekly = d_sim_hist_weekly %>%
   filter(!is.na(day)) %>% ungroup()
 
 # couple survival data with change in load data
-l_survival_sim_change_acwr = l_survival_sim_change %>% 
-  map(. %>% left_join(d_sim_hist_acwr %>% 
-                        select(-ends_with("load")), 
-                      by = c("Id" = "id", "Stop" = "day")))
+d_survival_sim_cpform_mods = d_survival_sim_cpform_mods %>% 
+                             left_join(d_sim_hist_acwr, by = c("id", "exit" = "day"))
 
-l_survival_sim_change_basemethods = l_survival_sim_change_acwr %>% 
-  map(. %>% left_join(d_sim_hist_weekly, 
-                      by = c("Id" = "id", "Stop" = "day")))
+d_survival_sim_cpform_mods = d_survival_sim_cpform_mods %>% 
+                             left_join(d_sim_hist_weekly, by = c("id", "exit" = "day"))
+
+ob_acwr = onebasis(d_survival_sim_cpform_mods$ra_t_load, "lin")
+ob_weekly_change = onebasis(d_survival_sim_cpform_mods$ewma_t_load, "lin")
+cb_dlnm_change = crossbasis(q_mat, lag=c(lag_min, lag_max), 
+                     argvar = list(fun="lin"),
+                     arglag = list(fun="ns", knots = 3))
 
 ################################################### Fit the models ##################################################
 library(rlang)
-map_cox = function(l_sim_surv, var){
-  var = enexpr(var)
-  eval_bare(expr(l_sim_surv %>% map(., ~coxph(Surv(Start, Stop, Event) ~ !!var, ., y = FALSE, ties = "efron"))))
+cox_basis = function(d_sim_surv, basis){
+  basis = enexpr(basis)
+  eval_bare(expr(coxph(Surv(enter, exit, event) ~ !!basis, d_sim_surv, y = FALSE, ties = "efron")))
 }
-l_fit_ra = map_cox(l_survival_sim_basemethods, ra_t_load)
-l_fit_ewma = map_cox(l_survival_sim_basemethods, ewma_t_load)
-l_fit_acwr = map_cox(l_survival_sim_change_basemethods, acwr)
-l_fit_weekly_change = map_cox(l_survival_sim_change_basemethods, weekly_change)
 
-# amount, 1 is j_constant, 2 j_decay, 3 j_exponential_decay, 4 lin_direction_flip
-# change, 1 is lin_constant, 2 lin_decay, 3 lin_exponential_decay
-arglist_final = list(list(fun = "lin"), list(fun = "lin"), list(fun="ns", knots = 3), list(fun="ns", knots = 6))
-arglist_final_change = list(list(fun = "lin"), list(fun = "lin"), list(fun="ns", knots = 3))
-l_crossbases_amount = map2(.x = l_q_matrices,
-                           .y = arglist_final,
-                           ~crossbasis(.x,
-                                       lag=c(lag_min, lag_max),
-                                       argvar = list(fun="ns", knots = 3, intercept = FALSE),
-                                       arglag = list(fun="ns", knots = 3, intercept = FALSE)))
+fit_ra = cox_basis(d_survival_sim_cpform_mods, ob_ra)
+fit_ewma = cox_basis(d_survival_sim_cpform_mods, ob_ewma)
+fit_dlnm = cox_basis(d_survival_sim_cpform_mods, cb_dlnm)
+  
+AIC(fit_ra)
+AIC(fit_ewma)
+AIC(fit_dlnm)  
 
-l_crossbases_change = map2(.x = l_q_matrices_change,
-                           .y = arglist_final_change,
-                           ~crossbasis(.x,
-                                       lag=c(lag_min, lag_max),
-                                       argvar = list(fun="lin", intercept = FALSE),
-                                       arglag = .y))
+preds_ra = crosspred(ob_ra, fit_ra, at = tl_predvalues, cen=500)
+preds_ewma = crosspred(ob_ewma, fit_ewma, at = tl_predvalues, cen=500)
+preds_dlnm = crosspred(cb_dlnm, fit_dlnm, at = tl_predvalues, cen=500)
 
-
-l_fit_dlnm_amount = map2(.x = l_counting_survival_sim,
-                         .y = l_crossbases_amount,
-                         ~coxph(Surv(enter, exit, event) ~ .y, 
-                                .x, y = FALSE, ties = "efron"))
-
-
-l_fit_dlnm_change = map2(.x = l_counting_survival_sim_change,
-                         .y = l_crossbases_change,
-                         ~coxph(Surv(enter, exit, event) ~ .y, 
-                                .x, y = FALSE, ties = "efron"))
-
-# RUN THE MODEL, SAVING IT IN THE LIST WITH MINIMAL INFO (SAVE MEMORY)
-# AIC, RMSE, coverage
-aic_j_decay_ra = AIC(l_fit_ra[[2]])
-aic_j_decay_ewma = AIC(l_fit_ewma[[2]])
-aic_j_decay_dlnm = AIC(l_fit_dlnm_amount[[2]])
-
-aic_lin_decay_acwr = AIC(l_fit_acwr[[2]])
-aic_lin_decay_weekly_change = AIC(l_fit_weekly_change[[2]])
-aic_lin_decay_dlnm = AIC(l_fit_dlnm_change[[2]])
+# STORE THE RESULTS FOR OVERALL CUMULATIVE SUMMARY
+cumpredsens = cumpredsens + preds_dlnm$allfit
+cumbiassens = cumbiassens + (preds_dlnm$allfit - truecumsens)
+cumcovsens = cumcovsens + (truecumsens >= preds_dlnm$allfit-qn*preds_dlnm$allse & truecumsens <= preds_dlnm$allfit+qn*preds_dlnm$allse)
+cumrmsesens =  cumrmsesens + (preds_dlnm$allfit - truecumsens)^2
 
 # Root-mean-squared-error
 rmse = function(estimate, target){
