@@ -417,7 +417,7 @@ l_fit_dlnm_change = map2(.x = l_counting_survival_sim_change,
                                 .x, y = FALSE, ties = "efron"))
 
 # RUN THE MODEL, SAVING IT IN THE LIST WITH MINIMAL INFO (SAVE MEMORY)
-
+# AIC, RMSE, coverage
 aic_j_decay_ra = AIC(l_fit_ra[[2]])
 aic_j_decay_ewma = AIC(l_fit_ewma[[2]])
 aic_j_decay_dlnm = AIC(l_fit_dlnm_amount[[2]])
@@ -426,15 +426,60 @@ aic_lin_decay_acwr = AIC(l_fit_acwr[[2]])
 aic_lin_decay_weekly_change = AIC(l_fit_weekly_change[[2]])
 aic_lin_decay_dlnm = AIC(l_fit_dlnm_change[[2]])
 
+# Root-mean-squared-error
+rmse = function(estimate, target){
+  sqrt(mean((estimate - target)^2)) 
+}
+
+#function for obtaining root mean squared error RMSE
+rmse = function(fit){
+  rmse = sqrt(mean(fit$residuals^2))
+  rmse
+}
+
+rmse(l_fit_ra[[2]])
+rmse(l_fit_ewma[[2]])
+rmse(l_fit_dlnm_amount[[2]])
+
+parameters::parameters(l_fit_ra[[2]])
+parameters::parameters(l_fit_ewma[[2]])
+parameters::parameters(l_fit_dlnm_amount[[2]])
+
+# function for obtaining parameters from any model fit
+# specify method for a column with the model-type
+get_params = function(fit, method){
+  d_params = parameters::parameters(fit) %>% tibble()
+  d_params = d_params %>% mutate(method = method, 
+                                 rmse = rmse(fit))
+  d_params
+}
+
+#function for obtaining c-statistics and brier score
+validation_stats = function(l_fit, injury, l_data){
+  injury = enexpr(injury)
+  brier = map2(.x = l_fit, .y = l_data, ~DescTools::BrierScore(pred=predict(.x, type="response"), resp = .y %>% dplyr::select(!!injury) %>% pull())) %>% 
+    map(., . %>% enframe(name = NULL, value = "brier"))
+  c_statistics = map2(.x = l_fit, .y = l_data, ~DescTools::Cstat(x=predict(.x, type="response"), resp = .y %>% dplyr::select(!!injury) %>% pull())) %>% 
+    map(., . %>% enframe(name = NULL, value = "c_stat"))
+  validation_stats = map2(.x = brier, .y = c_statistics, ~.x %>% mutate(c_stat = .y$c_stat))
+  validation_stats
+}
+
 # 3D GRAPHS OF PREDICTED VALUES FOR ASSESSING MODEL FIT
 cb_j_decay = crossbasis(l_q_matrices[[2]],
                         lag=c(lag_min, lag_max),
                         argvar = list(fun="ns", knots = 3, intercept = FALSE),
                         arglag = list(fun="ns", knots = 3))
 
-mod_j_decay = coxph(Surv(enter, exit, event) ~ cb_j_decay, l_counting_survival_sim[[2]], y = FALSE, ties = "efron")
+mod_j_decay = coxph(Surv(enter, exit, event) ~ l_crossbases_amount[[2]], l_counting_survival_sim[[2]], y = FALSE, ties = "efron")
 
+# for a onebasis model (rolling average)
+test_ra = l_survival_sim_basemethods[[2]]$ra_t_load
+ob_ra = onebasis(test_ra,"lin")
+mod_j_decay_ra = coxph(Surv(Start, Stop, Event) ~ ob_ra, l_survival_sim_basemethods[[2]], y = FALSE, ties = "efron")
+pred_j_decay_ra = crosspred(ob_ra, mod_j_decay_ra, at = tl_predvalues, cen = 300, cumul = TRUE)
 
+# for change in load
 cb_lin_decay = crossbasis(l_q_matrices_change[[2]],
                         lag=c(lag_min, lag_max),
                         argvar = list(fun="ns", knots = 3, intercept = FALSE),
@@ -443,6 +488,8 @@ cb_lin_decay = crossbasis(l_q_matrices_change[[2]],
 mod_lin_decay = coxph(Surv(enter, exit, event) ~ cb_lin_decay, l_counting_survival_sim_change[[2]], y = FALSE, ties = "efron")
 
 # OBTAIN THE PREDICTED RISK FOR A SEQUENCE OF TL LEVELS
+cb_j_decay = l_crossbases_amount[[2]]
+
 pred_j_decay = crosspred(cb_j_decay, mod_j_decay, at = tl_predvalues, cen = 300, cumul = TRUE)
 pred_lin_decay = crosspred(cb_lin_decay, mod_lin_decay, at = tl_predvalues_change, cen = 0, cumul = TRUE)
 
