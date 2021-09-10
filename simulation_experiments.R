@@ -190,25 +190,25 @@ l_cumeffs = map2(.x = flist,
 # add labels and collapse to dataset
 l_cumeffs = map2(.x = l_cumeffs,
                  .y = c(names_rels, name_extra), 
-                 ~.x %>% mutate(relationship = paste0(.y)))
+                 ~.x %>% mutate(relationship = paste0(.y))) %>% map(. %>% ungroup())
 
 # do the same for change. the difference is that flin is used for all functions in wlist_change.
 l_cumeffs_change = wlist_change %>% 
                    map(~calc_cumeffs_all(l_load_nested, t_load_type = "change", flin, .)) %>% 
                    map2(.x = .,
                         .y = names_rels, 
-                        ~.x %>% mutate(relationship = paste0(.y)))
+                        ~.x %>% mutate(relationship = paste0(.y))) %>% map(. %>% ungroup())
 
 ########################################Simulate injuries based on cumulative effect of training load#####################
 l_cumeffs_mats = l_cumeffs %>% map(. %>% mutate(day = rep(1:t_max, nsub)) %>% 
                     pivot_wider(names_from = id, values_from = cumeff) %>% 
-                    select(-relationship) %>% as.matrix)
+                    select(-relationship, -day) %>% as.matrix)
 
 l_cumeffs_mats_change = l_cumeffs_change %>% 
                             map(. %>% mutate(day = lead(rep(1:t_max, nsub))) %>% 
                             filter(!is.na(cumeff)) %>% 
                             pivot_wider(names_from = id, values_from = cumeff) %>% 
-                            select(-relationship) %>% as.matrix)
+                            select(-relationship, -day) %>% as.matrix)
 
 set.seed(1234)
 l_survival_sim = l_cumeffs_mats %>% map(., ~permalgorithm(nsub, t_max, Xmat = .,
