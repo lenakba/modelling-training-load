@@ -333,9 +333,9 @@ weekly_sum = function(x){
 # function to nest the exposure history data by each individual, 
 # and run a user-specified function on each of their datasets in the list
 function_on_list = function(d_sim_hist, FUN = NULL, day_start){
-  nested_list = d_sim_hist %>% nest(data = c(t_load, day, t_load_change))
+  nested_list = d_sim_hist %>% group_by(id) %>% nest()
   nested_list$data = nested_list$data %>% map(., ~FUN(.$t_load))
-  l_unnest = unnest(nested_list, cols = c(data)) %>% mutate(day = rep(day_start:t_max, nsub)) 
+  l_unnest = unnest(nested_list, cols = c(data)) %>% ungroup() %>% mutate(day = rep(day_start:t_max, nsub)) 
   l_unnest
 }
 
