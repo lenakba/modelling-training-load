@@ -275,10 +275,10 @@ d_sim_tl_hist = d_sim_tl_hist %>%
   mutate(ra_t_load = ra(d_sim_tl_hist$t_load, 28),
          ewma_t_load = ewma(d_sim_tl_hist$t_load, 28, 1))
 d_survival_sim_cpform_mods = d_survival_sim_cpform %>% left_join(d_sim_tl_hist, by = c("id", "exit" = "day"))
-ob_ra = onebasis(d_survival_sim_cpform_mods$ra_t_load, "ns", knots = 3)
-ob_ewma = onebasis(d_survival_sim_cpform_mods$ewma_t_load, "ns", knots = 3)
+ob_ra = onebasis(d_survival_sim_cpform_mods$ra_t_load, "poly", degree = 2)
+ob_ewma = onebasis(d_survival_sim_cpform_mods$ewma_t_load, "poly", degree = 2)
 cb_dlnm = crossbasis(q_mat, lag=c(lag_min, lag_max), 
-                     argvar = list(fun="ns", knots = 3),
+                     argvar = list(fun="poly", degree = 2),
                      arglag = list(fun="ns", knots = 3))
 
 # Perform typical methods for handling change in training load, ACWR and week-to-week change
@@ -377,17 +377,16 @@ aic_dlnm = AIC(fit_dlnm)
 tl_predvalues_ra = seq(min(d_survival_sim_cpform_mods$ra_t_load), max(d_survival_sim_cpform_mods$ra_t_load), 25) 
 tl_predvalues_ewma = seq(min(d_survival_sim_cpform_mods$ewma_t_load), max(d_survival_sim_cpform_mods$ewma_t_load), 25)
 
-cp_preds_ra = crosspred(ob_ra, fit_ra, at = tl_predvalues)
-cp_preds_ewma = crosspred(ob_ewma, fit_ewma, at = tl_predvalues)
-cp_preds_dlnm = crosspred(cb_dlnm, fit_dlnm, at = tl_predvalues)
+cp_preds_ra = crosspred(ob_ra, fit_ra, at = tl_predvalues, cen = 600, cumul = TRUE)
+cp_preds_ewma = crosspred(ob_ewma, fit_ewma, at = tl_predvalues, cen = 600, cumul = TRUE)
+cp_preds_dlnm = crosspred(cb_dlnm, fit_dlnm, at = tl_predvalues, cen = 600, cumul = TRUE)
 
-truecumcoefs = rowSums(calc_cumsum_coefs(tl_predvalues, fjdecay))
+true_effect = calc_coefs(tl_predvalues, lag_seq, fjdecay)
+truecumcoefs = rowSums(true_effect)
 
 cumeff_preds_ra = cp_preds_ra$allfit
 cumeff_preds_ewma = cp_preds_ewma$allfit
 cumeff_preds_dlnm = cp_preds_dlnm$allfit
-
-#bias_dlnm = cumeff_preds_dlnm - truecumcoefs
 
 coverage = function(estimate, target, se){
   qn = qnorm(0.95)  
@@ -425,7 +424,83 @@ rmse_ra = rmse(cumeff_preds_ra, truecumcoefs)
 rmse_ewma = rmse(cumeff_preds_ewma, truecumcoefs)
 rmse_dlnm = rmse(cumeff_preds_dlnm, truecumcoefs)
 
+######################################################## GRAPHS OF PREDICTED VALUES FOR ASSESSING MODEL FIT
+d_cumulative_preds = bind_cols(t_load = tl_predvalues, 
+                               ra = cp_preds_ra$allfit, 
+                               ewma = cp_preds_ewma$allfit,
+                               dlnm = cp_preds_dlnm$allfit) %>% 
+                               pivot_longer(!t_load, names_to = "model", 
+                                            values_to = "cumulative_effect")
+
+calc_ci = function(estimate, se, dir = NULL){
+  qn = qnorm(0.95)  
+  if(dir == "high"){
+    ci = estimate + qn*se
+  } else if (dir == "low"){
+    ci = estimate - qn*se
+  }
+}
+cumeff_preds_ci_high_ra = calc_ci(cumeff_preds_ra, cp_preds_ra$allse, "high")
+cumeff_preds_ci_low_ra = calc_ci(cumeff_preds_ra, cp_preds_ra$allse, "low")
+cumeff_preds_ci_high_ewma = calc_ci(cumeff_preds_ewma, cp_preds_ewma$allse, "high")
+cumeff_preds_ci_low_ewma = calc_ci(cumeff_preds_ewma, cp_preds_ewma$allse, "low")
+cumeff_preds_ci_high_dlnm = calc_ci(cumeff_preds_dlnm, cp_preds_dlnm$allse, "high")
+cumeff_preds_ci_low_dlnm = calc_ci(cumeff_preds_dlnm, cp_preds_dlnm$allse, "low")
+
+cis_high = bind_cols(t_load = tl_predvalues, 
+          ra = cumeff_preds_ci_high_ra, 
+          ewma = cumeff_preds_ci_high_ewma,
+          dlnm = cumeff_preds_ci_high_dlnm) %>% 
+  pivot_longer(!t_load, names_to = "model", 
+               values_to = "ci_high")
+
+cis_low = bind_cols(t_load = tl_predvalues, 
+                     ra = cumeff_preds_ci_low_ra, 
+                     ewma = cumeff_preds_ci_low_ewma,
+                     dlnm = cumeff_preds_ci_low_dlnm) %>% 
+  pivot_longer(!t_load, names_to = "model", 
+               values_to = "ci_low")
+
+d_cumul_preds = d_cumulative_preds %>% left_join(cis_high, by = c("t_load", "model")) %>% left_join(cis_low, by = c("t_load", "model")) 
+# true relationship 
+d_true_coefs = truecumcoefs %>% enframe() %>% rename(t_load = name, truerel = value) %>% mutate(t_load = as.numeric(t_load))
+
+text_size = 14
+ggplot(d_cumul_preds, aes(x = t_load)) +
+  facet_wrap(~model, ncol = 3, scales = "free") +
+  geom_line(data = d_true_coefs, aes(y = truerel, color = "True relationship"), size = 0.5) +
+  geom_ribbon(aes(min = ci_low, max = ci_high), alpha = 0.3, fill = nih_distinct[1]) + 
+  geom_line(aes(y = cumulative_effect, color = "Estimation"), size = 0.5) +
+  scale_y_continuous(limit = c(-15, 25), breaks = scales::breaks_width(5))  +
+  scale_color_manual(values = c(nih_distinct[1], "Black")) + 
+  ylab("Cumulative Hazard") +
+  xlab("sRPE (AU) on Day 0") +
+  theme_line(text_size, legend = TRUE) +
+  theme(panel.border = element_blank(), 
+        panel.background = element_blank(),
+        panel.grid = element_blank(),
+        axis.line = element_line(color = nih_distinct[4]),
+        strip.background = element_blank(),
+        strip.text.x = element_text(size = text_size, family="Trebuchet MS", colour="black", face = "bold", hjust = -0.01),
+        axis.ticks = element_line(color = nih_distinct[4]),
+        legend.position = "bottom")
+
+# time x amount effect (DLNM only)
+
+# j decay
+persp(x = tl_predvalues, y = lag_seq, exp(true_effect), ticktype="detailed", theta=230, ltheta=150, phi=40, lphi=30,
+      ylab="Lag (Days)", zlab="HR", shade=0.75, r=sqrt(3), d=5,
+      border=grey(0.2), col = nih_distinct[1], xlab = "sRPE")
+
+persp(x = tl_predvalues, y = lag_seq, cp_preds_dlnm$matRRfit, ticktype="detailed", theta=230, ltheta=150, phi=40, lphi=30,
+      ylab="Lag (Days)", zlab="HR", shade=0.75, r=sqrt(3), d=5,
+      border=grey(0.2), col = nih_distinct[1], xlab = "sRPE")
+
+
+
 ######################################################## 3D GRAPHS OF PREDICTED VALUES FOR ASSESSING MODEL FIT
+
+
 cb_j_decay = crossbasis(l_q_matrices[[2]],
                         lag=c(lag_min, lag_max),
                         argvar = list(fun="ns", knots = 3, intercept = FALSE),
@@ -471,13 +546,19 @@ persp(x = tl_predvalues_change, y = lag_seq, pred_lin_decay$matRRfit, ticktype="
       ylab="Lag (Days)", zlab="HR", shade=0.75, r=sqrt(3), d=5, 
       border=grey(0.2), col = nih_distinct[1], xlab = "sRPE")
 
+
+
+
+
+
+
 library(ggeffects)
-preds_ra = ggpredict(l_fit_ra[[2]], terms= "ra_t_load [tl_predvalues]", type = "survival")
+preds_ra = ggpredict(fit_ra)
 ggplot(preds_ra, aes(x, predicted)) + geom_line()
 
 preds_ra[[3]]
 
-fit_ra = survfit(Surv(Start, Stop, Event) ~ ra_t_load, data = l_survival_sim_basemethods[[2]])
+fit_ra = survfit(Surv(Start, Stop, Event) ~ cb_ra, data = d_survival_sim_cpform_mods)
 class(fit_ra)
 
 library(survminer)
