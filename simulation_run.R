@@ -422,7 +422,10 @@ folder_j_decay = paste0(base_folder, "amount_j_decay\\")
 folder_lin_decay = paste0(base_folder, "change_lin_decay\\")
 
 set.seed(1234)
-sim_fit_and_res(nsub, t_max, tl_valid, "amount", tl_var = t_load, fvar = fj, flag = wdecay, predvalues = tl_predvalues, i = 1, folder = folder_j_decay)
-sim_fit_and_res(nsub, t_max, tl_valid, "change", tl_var = t_load_change, fvar = flin, flag = wdecay, predvalues = tl_predvalues_change, i = 1, folder = folder_lin_decay)
+sim_fit_and_res(nsub, t_max, tl_valid, "amount", tl_var = t_load, fvar = fj, flag = wdecay, 
+                predvalues = tl_predvalues, i = 1, folder = folder_j_decay)
+sim_fit_and_res(nsub, t_max, tl_valid, "change", tl_var = t_load_change, fvar = flin, flag = wexponential_decay, 
+                predvalues = tl_predvalues_change, i = 1, folder = folder_lin_decay)
+
 
 
