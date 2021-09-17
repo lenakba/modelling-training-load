@@ -90,9 +90,6 @@ sim_tl_history = function(nsub, t_max, tl_values){
   d_sim_tl_hist %>% select(id, day, t_load, t_load_change)
 }
 
-set.seed(1234)
-d_sim_tl_hist = sim_tl_history(nsub, t_max, tl_valid)
-
 #############################Calculate cumulative effect of training load given exposure histories#######################
 
 # function to compute the cumulative effect of training load exposure, requires:
@@ -125,14 +122,7 @@ calc_cumeffs_all = function(d_sim_hist, t_load_type = "amount", fvar, flag){
   d_cumeffs
 }
 
-d_cumeff = calc_cumeffs_all(d_sim_tl_hist, t_load_type = "amount", fj, wdecay)
-
 ########################################Simulate injuries based on cumulative effect of training load#####################
-d_cumeff_mat = d_cumeff %>% mutate(day = rep(1:t_max, nsub)) %>% 
-  pivot_wider(names_from = id, values_from = cumeff) %>% select(-day) %>% as.matrix
-
-set.seed(1234)
-d_survival_sim = permalgorithm(nsub, t_max, Xmat = d_cumeff_mat, censorRandom = runif(nsub, 1, t_max*2), betas=1)
 
 # helper function which simulates survival data from training load values
 # step 1 calculate cumulative effect of training load for each participant 
@@ -147,8 +137,7 @@ sim_survdata = function(d_hist, nsub, t_max, t_load_type, fvar, flag){
   d_survival_sim = permalgorithm(nsub, t_max, Xmat = d_cumeff_mat, censorRandom = runif(nsub, 1, t_max*2), betas=1)
   d_survival_sim
 } 
-set.seed(1234)
-d_survival_sim = sim_survdata(d_sim_tl_hist, nsub, t_max, t_load_type = "amount", fvar = fj, flag = wdecay)
+
 ########################################Define the crossbasis for the DLNM method#####################
 
 # function to arrange the simulated survival data in counting process form
@@ -191,15 +180,6 @@ from_sim_surv_to_q = function(d_survival_sim, d_tl_hist_wide){
   q
 }
 
-# arrange the exposure history in wide format in a matrix
-# which is neeeded for calculating the q-matrix for the crossbasis
-d_sim_tl_hist_spread_day = 
-  d_sim_tl_hist %>% select(-t_load_change) %>% 
-  pivot_wider(names_from = day, values_from = t_load) %>% select(-id) %>% as.matrix
-
-d_survival_sim_cpform = counting_process_form(d_survival_sim)
-q_mat = from_sim_surv_to_q(d_survival_sim, d_sim_tl_hist_spread_day)
-
 ####################################### Modify training load with different methods ####################################
 
 # Perform the typical methods for handling training load amount: rolling average and EWMA
@@ -217,19 +197,7 @@ ewma = function(x, n_days, window){
   TTR::EMA(x, n = window, ratio = 2/(1+n_days))
 }
 
-# calc rolling average and ewma on training load amount
-d_sim_tl_hist = d_sim_tl_hist %>% 
-  mutate(ra_t_load = ra(d_sim_tl_hist$t_load, 28),
-         ewma_t_load = ewma(d_sim_tl_hist$t_load, 28, 1))
-d_survival_sim_cpform_mods = d_survival_sim_cpform %>% left_join(d_sim_tl_hist, by = c("id", "exit" = "day"))
-ob_ra = onebasis(d_survival_sim_cpform_mods$ra_t_load, "poly", degree = 2)
-ob_ewma = onebasis(d_survival_sim_cpform_mods$ewma_t_load, "poly", degree = 2)
-cb_dlnm = crossbasis(q_mat, lag=c(lag_min, lag_max), 
-                     argvar = list(fun="poly", degree = 2),
-                     arglag = list(fun="ns", knots = 3))
-
 # Perform typical methods for handling change in training load, ACWR and week-to-week change
-
 # calculate 7:28 coupled ACWR using RA on training load amount (this becomes, in theory, a measure of change)
 # move 1 day at a time as advised in Carey et al. 2017
 # function calculates RA on a sliding window of 21 days
@@ -265,55 +233,12 @@ function_on_list = function(d_sim_hist, FUN = NULL, day_start){
   l_unnest
 }
 
-# the first acute load can be calulated from day 22 to day 28
-# to have an equal number acute and chronic values
-d_sim_tl_hist_acwr_acute = d_sim_tl_hist %>% filter(day >= 22)
-d_sim_hist_acute = function_on_list(d_sim_tl_hist_acwr_acute, FUN = acute_mean, 28) %>% rename(acute_load = data)
-d_sim_hist_chronic = function_on_list(d_sim_tl_hist, FUN = chronic_ra, 28) %>% rename(chronic_load = data)
-
-# calculate the ACWR be acute/chronic
-d_sim_hist_acwr = d_sim_hist_acute %>% 
-  left_join(d_sim_hist_chronic, by = c("id", "day")) %>% 
-  mutate(acwr = acute_load/chronic_load)
-
-# week to week change requires 2 full weeks before calculation
-# the sliding window thereafter jumps one day at a time
-# but the calculation is "uncoupled"
-d_sim_hist_weekly = function_on_list(d_sim_tl_hist, FUN = weekly_sum, 7) %>% 
-  rename(week_sum = data) %>% 
-  mutate(week_sum_lead = lead(week_sum, 7),
-         weekly_change = week_sum_lead-week_sum)
-
-# the difference can't be measured until a week after the first week
-d_sim_hist_weekly = d_sim_hist_weekly %>% 
-  select(-week_sum, -week_sum_lead) %>% 
-  group_by(id) %>% 
-  mutate(day = lead(day, 7)) %>% 
-  filter(!is.na(day)) %>% ungroup()
-
-# couple survival data with change in load data
-d_survival_sim_cpform_mods = d_survival_sim_cpform_mods %>% 
-  left_join(d_sim_hist_acwr, by = c("id", "exit" = "day"))
-
-d_survival_sim_cpform_mods = d_survival_sim_cpform_mods %>% 
-  left_join(d_sim_hist_weekly, by = c("id", "exit" = "day"))
-
-ob_acwr = onebasis(d_survival_sim_cpform_mods$ra_t_load, "lin")
-ob_weekly_change = onebasis(d_survival_sim_cpform_mods$ewma_t_load, "lin")
-cb_dlnm_change = crossbasis(q_mat, lag=c(lag_min, lag_max), 
-                            argvar = list(fun="lin"),
-                            arglag = list(fun="ns", knots = 3))
-
 ################################################### Fit the models ##################################################
 library(rlang)
 cox_basis = function(d_sim_surv, basis){
   basis = enexpr(basis)
   eval_bare(expr(coxph(Surv(enter, exit, event) ~ !!basis, d_sim_surv, y = FALSE, ties = "efron")))
 }
-
-fit_ra = cox_basis(d_survival_sim_cpform_mods, ob_ra)
-fit_ewma = cox_basis(d_survival_sim_cpform_mods, ob_ewma)
-fit_dlnm = cox_basis(d_survival_sim_cpform_mods, cb_dlnm)
 
 ################################################## Calculate numeric performance measures ############################
 
@@ -496,8 +421,8 @@ sim_fit_and_res = function(nsub, t_max, tl_values, t_load_type, tl_var, fvar, fl
                        aic = AIC(fit_dlnm_change))
     list_res = list(d_acwr, d_ewma, d_dlnm)
   }
-  saveRDS(list_fits, file = paste0(folder, "fits_",i,"_.rds"))
-  saveRDS(list_res, file = paste0(folder, "res_",i,"_.rds"))
+  list_res
+
 }
 
 base_folder = "O:\\Prosjekter\\Bache-Mathiesen-003-modelling-training-load\\Data\\simulations\\"
