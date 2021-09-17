@@ -5,8 +5,6 @@ library(survival) # for wrangling time-to-event data
 library(splines) # for natural splines/cubic splines
 library(lmisc) # NIH colors for figures
 library(slider) # for running functions on a sliding window of values, moving iteratively 1 step at a time
-library(rlang) # for enexpr and eval_bare() for tidyverse-syntax functions
-
 # so we don't have to deal with scientific notations
 # and strings aren't automatically read as factors:
 options(scipen = 40, 
