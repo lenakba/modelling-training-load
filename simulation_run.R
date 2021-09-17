@@ -5,6 +5,7 @@ library(survival) # for wrangling time-to-event data
 library(splines) # for natural splines/cubic splines
 library(lmisc) # NIH colors for figures
 library(slider) # for running functions on a sliding window of values, moving iteratively 1 step at a time
+library(rlang) # for enexpr and eval_bare() for tidyverse-syntax functions
 
 # so we don't have to deal with scientific notations
 # and strings aren't automatically read as factors:
@@ -233,13 +234,6 @@ function_on_list = function(d_sim_hist, FUN = NULL, day_start){
   l_unnest
 }
 
-################################################### Fit the models ##################################################
-library(rlang)
-cox_basis = function(d_sim_surv, basis){
-  basis = enexpr(basis)
-  eval_bare(expr(coxph(Surv(enter, exit, event) ~ !!basis, d_sim_surv, y = FALSE, ties = "efron")))
-}
-
 ################################################## Calculate numeric performance measures ############################
 
 aic_ra = AIC(fit_ra)
@@ -326,10 +320,10 @@ sim_fit_and_res = function(nsub, t_max, tl_values, t_load_type, tl_var, fvar, fl
   cb_dlnm = crossbasis(q_mat, lag=c(lag_min, lag_max), 
                        argvar = list(fun="poly", degree = 2),
                        arglag = list(fun="ns", knots = 3))
-  
-  fit_ra = cox_basis(d_survival_sim_cpform_mods, ob_ra)
-  fit_ewma = cox_basis(d_survival_sim_cpform_mods, ob_ewma)
-  fit_dlnm = cox_basis(d_survival_sim_cpform_mods, cb_dlnm)
+
+  fit_ra = coxph(Surv(enter, exit, event) ~ ob_ra, d_survival_sim_cpform_mods, y = FALSE, ties = "efron")
+  fit_ewma = coxph(Surv(enter, exit, event) ~ ob_ewma, d_survival_sim_cpform_mods, y = FALSE, ties = "efron")
+  fit_dlnm = coxph(Surv(enter, exit, event) ~ cb_dlnm, d_survival_sim_cpform_mods, y = FALSE, ties = "efron")
   list_fits = list(fit_ra, fit_ewma, fit_dlnm)
 
   cp_preds_ra = crosspred(ob_ra, fit_ra, at = predvalues, cen = 600, cumul = TRUE)
@@ -393,10 +387,10 @@ sim_fit_and_res = function(nsub, t_max, tl_values, t_load_type, tl_var, fvar, fl
                                 argvar = list(fun="lin"),
                                 arglag = list(fun="ns", knots = 3))
     
-    fit_acwr = cox_basis(d_survival_sim_cpform_mods, ob_acwr)
-    fit_weekly_change = cox_basis(d_survival_sim_cpform_mods, ob_weekly_change)
-    fit_dlnm_change = cox_basis(d_survival_sim_cpform_mods, cb_dlnm_change)
-    list_fits = list(fit_acwr, fit_weekly_change, fit_dlnm)
+    fit_acwr = coxph(Surv(enter, exit, event) ~ ob_acwr, d_survival_sim_cpform_mods, y = FALSE, ties = "efron")
+    fit_weekly_change = coxph(Surv(enter, exit, event) ~ ob_weekly_change, d_survival_sim_cpform_mods, y = FALSE, ties = "efron")
+    fit_dlnm_change = coxph(Surv(enter, exit, event) ~ cb_dlnm_change, d_survival_sim_cpform_mods, y = FALSE, ties = "efron")
+    list_fits = list(fit_acwr, fit_weekly_change, fit_dlnm_change)
     
     predvalues_acwr = seq(min(d_sim_hist_acwr$acwr, na.rm = TRUE), max(d_sim_hist_acwr$acwr, na.rm = TRUE), 25)
     predvalues_wchange = seq(min(d_sim_hist_weekly$weekly_change, na.rm = TRUE), max(d_sim_hist_weekly$weekly_change, na.rm = TRUE), 25)
@@ -421,8 +415,8 @@ sim_fit_and_res = function(nsub, t_max, tl_values, t_load_type, tl_var, fvar, fl
                        aic = AIC(fit_dlnm_change))
     list_res = list(d_acwr, d_ewma, d_dlnm)
   }
-  list_res
-
+  saveRDS(list_fits, file = paste0(folder, "fits_",i,"_.rds"))
+  saveRDS(list_res, file = paste0(folder, "res_",i,"_.rds"))
 }
 
 base_folder = "O:\\Prosjekter\\Bache-Mathiesen-003-modelling-training-load\\Data\\simulations\\"
