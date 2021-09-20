@@ -270,11 +270,27 @@ ewma = function(x, n_days, window){
   TTR::EMA(x, n = window, ratio = 2/(1+n_days))
 }
 
+# functions for calculating ra and ewma on a sliding window that moves one day at a time.
+slide_ra = function(x){
+  l = slide(x, ~ra(., 28), .before = 27, step = 1, .complete =TRUE) %>% map(last)
+  l = compact(l)
+  l = unlist(l)
+  l
+}
+
+slide_ewma = function(x){
+  l = slide(x, ~ewma(., 28, 1), .before = 27, step = 1, .complete =TRUE) %>% map(last)
+  l = compact(l)
+  l = unlist(l)
+  l
+}
+
+d_sim_hist_ra = function_on_list(d_sim_tl_hist, slide_ra, 28) %>% rename(ra_t_load = data)
+d_sim_hist_ewma = function_on_list(d_sim_tl_hist, slide_ewma, 28) %>% rename(ewma_t_load = data)
+
 # calc rolling average and ewma on training load amount
-d_sim_tl_hist = d_sim_tl_hist %>% 
-  mutate(ra_t_load = ra(d_sim_tl_hist$t_load, 28),
-         ewma_t_load = ewma(d_sim_tl_hist$t_load, 28, 1))
-d_survival_sim_cpform_mods = d_survival_sim_cpform %>% left_join(d_sim_tl_hist, by = c("id", "exit" = "day"))
+d_survival_sim_cpform_mods = d_survival_sim_cpform %>% left_join(d_sim_hist_ra, by = c("id", "exit" = "day"))
+d_survival_sim_cpform_mods = d_survival_sim_cpform_mods %>% left_join(d_sim_hist_ewma, by = c("id", "exit" = "day"))
 ob_ra = onebasis(d_survival_sim_cpform_mods$ra_t_load, "poly", degree = 2)
 ob_ewma = onebasis(d_survival_sim_cpform_mods$ewma_t_load, "poly", degree = 2)
 cb_dlnm = crossbasis(q_mat, lag=c(lag_min, lag_max), 
@@ -285,16 +301,8 @@ cb_dlnm = crossbasis(q_mat, lag=c(lag_min, lag_max),
 
 # calculate 7:28 coupled ACWR using RA on training load amount (this becomes, in theory, a measure of change)
 # move 1 day at a time as advised in Carey et al. 2017
-# function calculates RA on a sliding window of 21 days
-chronic_ra = function(x){
-  l = slide(x, ~ra(., 28), .before = 27, step = 1, .complete =TRUE) %>% map(last)
-  l = compact(l)
-  l = unlist(l)
-  l
-}
-
 # function calculates mean on a sliding window of 7 days
-acute_mean = function(x){
+slide_mean = function(x){
   l = slide(x, ~mean(.), .before = 6, step = 1, .complete =TRUE)
   l = compact(l)
   l = unlist(l)
@@ -302,7 +310,7 @@ acute_mean = function(x){
 }
 
 # function calculating sums on a sliding window of 7 days
-weekly_sum = function(x){
+slide_sum = function(x){
   l = slide(x, ~sum(.), .before = 6, step = 1, .complete =TRUE)
   l = compact(l)
   l = unlist(l)
@@ -321,8 +329,8 @@ function_on_list = function(d_sim_hist, FUN = NULL, day_start){
 # the first acute load can be calulated from day 22 to day 28
 # to have an equal number acute and chronic values
 d_sim_tl_hist_acwr_acute = d_sim_tl_hist %>% filter(day >= 22)
-d_sim_hist_acute = function_on_list(d_sim_tl_hist_acwr_acute, FUN = acute_mean, 28) %>% rename(acute_load = data)
-d_sim_hist_chronic = function_on_list(d_sim_tl_hist, FUN = chronic_ra, 28) %>% rename(chronic_load = data)
+d_sim_hist_acute = function_on_list(d_sim_tl_hist_acwr_acute, FUN = slide_mean, 28) %>% rename(acute_load = data)
+d_sim_hist_chronic = function_on_list(d_sim_tl_hist, FUN = slide_ra, 28) %>% rename(chronic_load = data)
 
 # calculate the ACWR be acute/chronic
 d_sim_hist_acwr = d_sim_hist_acute %>% 
@@ -332,7 +340,7 @@ d_sim_hist_acwr = d_sim_hist_acute %>%
 # week to week change requires 2 full weeks before calculation
 # the sliding window thereafter jumps one day at a time
 # but the calculation is "uncoupled"
-d_sim_hist_weekly = function_on_list(d_sim_tl_hist, FUN = weekly_sum, 7) %>% 
+d_sim_hist_weekly = function_on_list(d_sim_tl_hist, FUN = slide_sum, 7) %>% 
   rename(week_sum = data) %>% 
   mutate(week_sum_lead = lead(week_sum, 7),
          weekly_change = week_sum_lead-week_sum)
