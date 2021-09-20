@@ -3,7 +3,6 @@ library(dlnm) # distributed lag nonlinear models
 library(PermAlgo) # simulated survival data dependent on conditions and covariates
 library(survival) # for wrangling time-to-event data
 library(splines) # for natural splines/cubic splines
-library(lmisc) # NIH colors for figures
 library(slider) # for running functions on a sliding window of values, moving iteratively 1 step at a time
 # so we don't have to deal with scientific notations
 # and strings aren't automatically read as factors:
@@ -418,14 +417,63 @@ sim_fit_and_res = function(nsub, t_max, tl_values, t_load_type, tl_var, fvar, fl
 }
 
 base_folder = "O:\\Prosjekter\\Bache-Mathiesen-003-modelling-training-load\\Data\\simulations\\"
+# amount of load
+folder_j_constant = paste0(base_folder, "amount_j_constant\\")
 folder_j_decay = paste0(base_folder, "amount_j_decay\\")
-folder_lin_decay = paste0(base_folder, "change_lin_decay\\")
+folder_j_exponential_decay = paste0(base_folder, "amount_j_exponential_decay\\")
+folder_lin_direction_flip = paste0(base_folder, "amount_lin_direction_flip\\")
 
+# change in load
+folder_lin_constant = paste0(base_folder, "change_lin_constant\\")
+folder_lin_decay = paste0(base_folder, "change_lin_decay\\")
+folder_lin_exponential_decay = paste0(base_folder, "change_lin_exponential_decay\\")
+
+
+startsim = 1
+nsim = 3
+seqsim = startsim:nsim
 set.seed(1234)
-sim_fit_and_res(nsub, t_max, tl_valid, "amount", tl_var = t_load, fvar = fj, flag = wdecay, 
-                predvalues = tl_predvalues, i = 1, folder = folder_j_decay)
-sim_fit_and_res(nsub, t_max, tl_valid, "change", tl_var = t_load_change, fvar = flin, flag = wexponential_decay, 
-                predvalues = tl_predvalues_change, i = 1, folder = folder_lin_decay)
+for(i in seqsim){
+  # amount of training load
+  sim_fit_and_res(nsub, t_max, tl_valid, "amount", tl_var = t_load, fvar = fj, flag = wconst, 
+                  predvalues = tl_predvalues, i = i, folder = folder_j_constant)
+  sim_fit_and_res(nsub, t_max, tl_valid, "amount", tl_var = t_load, fvar = fj, flag = wdecay, 
+                  predvalues = tl_predvalues, i = i, folder = folder_j_decay)
+  sim_fit_and_res(nsub, t_max, tl_valid, "amount", tl_var = t_load, fvar = fj, flag = wexponential_decay, 
+                  predvalues = tl_predvalues, i = i, folder = folder_j_exponential_decay)
+  
+  # change in training load
+  sim_fit_and_res(nsub, t_max, tl_valid, "change", tl_var = t_load_change, fvar = flin, flag = wconst, 
+                  predvalues = tl_predvalues_change, i = i, folder = folder_lin_constant)
+  sim_fit_and_res(nsub, t_max, tl_valid, "change", tl_var = t_load_change, fvar = flin, flag = wdecay, 
+                  predvalues = tl_predvalues_change, i = i, folder = folder_lin_decay)
+  sim_fit_and_res(nsub, t_max, tl_valid, "change", tl_var = t_load_change, fvar = flin, flag = wexponential_decay, 
+                  predvalues = tl_predvalues_change, i = i, folder = folder_lin_exponential_decay)
+}
+
+#-----------------------Option: multiple cores
+library(foreach)
+library(doParallel)
+set.seed(1234)
+numCores = 4
+registerDoParallel(numCores)
+
+startsim = 1
+nsim = 4
+seqsim = startsim:nsim
+
+options(warn=-1)
+foreach (i = seqsim) %dopar% {
+  library(tidyverse)
+  library(dlnm)
+  library(PermAlgo)
+  library(survival)
+  library(splines)
+  library(slider) 
+  sim_fit_and_res(nsub, t_max, tl_valid, "amount", tl_var = t_load, fvar = fj, flag = wdecay, 
+                  predvalues = tl_predvalues, i = i, folder = folder_j_decay)
+}
+options(warn=0)
 
 
 
