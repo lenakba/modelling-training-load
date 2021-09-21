@@ -192,25 +192,21 @@ ra = function(x, n_days, window = TRUE, ...){
 
 # function for calculating exponentially waited moving averages
 # using similar syntax as the RA-function
-ewma = function(x, n_days, window){
-  TTR::EMA(x, n = window, ratio = 2/(1+n_days))
+# wilder=FALSE (the default) uses an exponential smoothing ratio of 2/(n+1)
+# same as in williams et al. 2016
+ewma = function(x, n_days = lag_max){
+  TTR::EMA(x, n = n_days, wilder = FALSE)
 }
 
-# functions for calculating ra and ewma on a sliding window that moves one day at a time.
+# functions for calculating ra on a sliding window that moves one day at a time.
+# this ensures that RA isn't calculated until the first 4 weeks have passed
+# the ewma function already does this
 slide_ra = function(x){
   l = slide(x, ~ra(., 28), .before = 27, step = 1, .complete =TRUE) %>% map(last)
   l = compact(l)
   l = unlist(l)
   l
 }
-
-slide_ewma = function(x){
-  l = slide(x, ~ewma(., 28, 1), .before = 27, step = 1, .complete =TRUE) %>% map(last)
-  l = compact(l)
-  l = unlist(l)
-  l
-}
-
 
 # Perform typical methods for handling change in training load, ACWR and week-to-week change
 # calculate 7:28 coupled ACWR using RA on training load amount (this becomes, in theory, a measure of change)
@@ -316,8 +312,8 @@ sim_fit_and_res = function(nsub, t_max, tl_values, t_load_type, tl_var, fvar, fl
   if(t_load_type == "amount"){
 
   # calc rolling average and ewma on training load amount
-  d_sim_hist_ra = function_on_list(d_tl_hist, slide_ra, 28) %>% rename(ra_t_load = data)
-  d_sim_hist_ewma = function_on_list(d_tl_hist, slide_ewma, 28) %>% rename(ewma_t_load = data)
+  d_sim_hist_ra = function_on_list(d_tl_hist, slide_ra, lag_max) %>% rename(ra_t_load = data)
+  d_sim_hist_ewma = function_on_list(d_tl_hist, ewma, lag_max) %>% rename(ewma_t_load = data)
   d_survival_sim_cpform_mods = d_survival_sim_cpform %>% left_join(d_sim_hist_ra, by = c("id", "exit" = "day"))
   d_survival_sim_cpform_mods = d_survival_sim_cpform_mods %>% left_join(d_sim_hist_ewma, by = c("id", "exit" = "day"))
   ob_ra = onebasis(d_survival_sim_cpform_mods$ra_t_load, "poly", degree = 2)
@@ -356,8 +352,8 @@ sim_fit_and_res = function(nsub, t_max, tl_values, t_load_type, tl_var, fvar, fl
     # the first acute load can be calulated from day 22 to day 28
     # to have an equal number acute and chronic values
     d_sim_tl_hist_acwr_acute = d_tl_hist %>% filter(day >= 22)
-    d_sim_hist_acute = function_on_list(d_sim_tl_hist_acwr_acute, FUN = slide_sum, 28) %>% rename(acute_load = data)
-    d_sim_hist_chronic = function_on_list(d_tl_hist, FUN = slide_chronic, 28) %>% rename(chronic_load = data)
+    d_sim_hist_acute = function_on_list(d_sim_tl_hist_acwr_acute, FUN = slide_sum, lag_max) %>% rename(acute_load = data)
+    d_sim_hist_chronic = function_on_list(d_tl_hist, FUN = slide_chronic, lag_max) %>% rename(chronic_load = data)
     
     # calculate the ACWR be acute/chronic
     d_sim_hist_acwr = d_sim_hist_acute %>% 
