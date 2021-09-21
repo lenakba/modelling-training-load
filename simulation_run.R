@@ -229,7 +229,8 @@ slide_chronic = function(x){
 function_on_list = function(d_sim_hist, FUN = NULL, day_start){
   nested_list = d_sim_hist %>% group_by(id) %>% nest()
   nested_list$data = nested_list$data %>% map(., ~FUN(.$t_load))
-  l_unnest = unnest(nested_list, cols = c(data)) %>% ungroup() %>% mutate(day = rep(day_start:t_max, nsub)) 
+  l_unnest = unnest(nested_list, cols = c(data)) %>% ungroup() %>% 
+    filter(!is.na(data)) %>% mutate(day = rep(day_start:t_max, nsub)) 
   l_unnest
 }
 
@@ -433,25 +434,25 @@ folder_lin_exponential_decay = paste0(base_folder, "change_lin_exponential_decay
 
 
 startsim = 1
-nsim = 10
+nsim = 3
 seqsim = startsim:nsim
 set.seed(1234)
 for(i in seqsim){
   # amount of training load
-  sim_fit_and_res(nsub, t_max, tl_valid, "amount", tl_var = t_load, fvar = fj, flag = wconst, 
+  # sim_fit_and_res(nsub, t_max, tl_valid, "amount", tl_var = t_load, fvar = fj, flag = wconst, 
                   predvalues = tl_predvalues, i = i, folder = folder_j_constant)
-  sim_fit_and_res(nsub, t_max, tl_valid, "amount", tl_var = t_load, fvar = fj, flag = wdecay, 
-                  predvalues = tl_predvalues, i = i, folder = folder_j_decay)
-  sim_fit_and_res(nsub, t_max, tl_valid, "amount", tl_var = t_load, fvar = fj, flag = wexponential_decay, 
-                  predvalues = tl_predvalues, i = i, folder = folder_j_exponential_decay)
+  # sim_fit_and_res(nsub, t_max, tl_valid, "amount", tl_var = t_load, fvar = fj, flag = wdecay, 
+  #                 predvalues = tl_predvalues, i = i, folder = folder_j_decay)
+  # sim_fit_and_res(nsub, t_max, tl_valid, "amount", tl_var = t_load, fvar = fj, flag = wexponential_decay, 
+  #                 predvalues = tl_predvalues, i = i, folder = folder_j_exponential_decay)
   
   # change in training load
   sim_fit_and_res(nsub, t_max, tl_valid, "change", tl_var = t_load_change, fvar = flin, flag = wconst, 
                   predvalues = tl_predvalues_change, i = i, folder = folder_lin_constant)
-  sim_fit_and_res(nsub, t_max, tl_valid, "change", tl_var = t_load_change, fvar = flin, flag = wdecay, 
-                  predvalues = tl_predvalues_change, i = i, folder = folder_lin_decay)
-  sim_fit_and_res(nsub, t_max, tl_valid, "change", tl_var = t_load_change, fvar = flin, flag = wexponential_decay, 
-                  predvalues = tl_predvalues_change, i = i, folder = folder_lin_exponential_decay)
+  # sim_fit_and_res(nsub, t_max, tl_valid, "change", tl_var = t_load_change, fvar = flin, flag = wdecay, 
+  #                 predvalues = tl_predvalues_change, i = i, folder = folder_lin_decay)
+  # sim_fit_and_res(nsub, t_max, tl_valid, "change", tl_var = t_load_change, fvar = flin, flag = wexponential_decay, 
+  #                 predvalues = tl_predvalues_change, i = i, folder = folder_lin_exponential_decay)
 }
 
 #-----------------------Option: multiple cores
