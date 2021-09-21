@@ -213,17 +213,16 @@ slide_ewma = function(x){
 
 # Perform typical methods for handling change in training load, ACWR and week-to-week change
 # calculate 7:28 coupled ACWR using RA on training load amount (this becomes, in theory, a measure of change)
-# move 1 day at a time as advised in Carey et al. 2017
-slide_mean = function(x){
-  l = slide(x, ~mean(.), .before = 6, step = 1, .complete =TRUE)
+# function calculating sums on a sliding window of 7 days
+slide_sum = function(x){
+  l = slide(x, ~sum(.), .before = 6, step = 1, .complete =TRUE)
   l = compact(l)
   l = unlist(l)
   l
 }
 
-# function calculating sums on a sliding window of 7 days
-slide_sum = function(x){
-  l = slide(x, ~sum(.), .before = 6, step = 1, .complete =TRUE)
+slide_chronic = function(x){
+  l = slide(x, ~sum(.), .before = 27, step = 1, .complete =TRUE) %>% map(~./4)
   l = compact(l)
   l = unlist(l)
   l
@@ -356,8 +355,8 @@ sim_fit_and_res = function(nsub, t_max, tl_values, t_load_type, tl_var, fvar, fl
     # the first acute load can be calulated from day 22 to day 28
     # to have an equal number acute and chronic values
     d_sim_tl_hist_acwr_acute = d_tl_hist %>% filter(day >= 22)
-    d_sim_hist_acute = function_on_list(d_sim_tl_hist_acwr_acute, FUN = slide_mean, 28) %>% rename(acute_load = data)
-    d_sim_hist_chronic = function_on_list(d_tl_hist, FUN = slide_ra, 28) %>% rename(chronic_load = data)
+    d_sim_hist_acute = function_on_list(d_sim_tl_hist_acwr_acute, FUN = slide_sum, 28) %>% rename(acute_load = data)
+    d_sim_hist_chronic = function_on_list(d_tl_hist, FUN = slide_chronic, 28) %>% rename(chronic_load = data)
     
     # calculate the ACWR be acute/chronic
     d_sim_hist_acwr = d_sim_hist_acute %>% 
