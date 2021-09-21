@@ -208,9 +208,8 @@ slide_ra = function(x){
   l
 }
 
-# Perform typical methods for handling change in training load, ACWR and week-to-week change
-# calculate 7:28 coupled ACWR using RA on training load amount (this becomes, in theory, a measure of change)
-# function calculating sums on a sliding window of 7 days
+# calculate 7:28 coupled ACWR (this becomes, in theory, a measure of change)
+# use equation in Lolli et al. 2017, most common in football studies Wang et al. 2021.
 slide_sum = function(x){
   l = slide(x, ~sum(.), .before = 6, step = 1, .complete =TRUE)
   l = compact(l)

@@ -276,7 +276,7 @@ ewma = function(x, n_days = lag_max){
 # functions for calculating ra on a sliding window that moves one day at a time.
 # this ensures that RA isn't calculated until the first 4 weeks have passed
 slide_ra = function(x){
-  l = slide(x, ~ra(., lag_max), .before = 27, step = 1, .complete = TRUE) %>% map(last)
+  l = slide(x, ~ra(., lag_max), .before = lag_max-1, step = 1, .complete = TRUE) %>% map(last)
   l = compact(l)
   l = unlist(l)
   l
@@ -306,9 +306,8 @@ cb_dlnm = crossbasis(q_mat, lag=c(lag_min, lag_max),
 
 # Perform typical methods for handling change in training load, ACWR and week-to-week change
 
-# calculate 7:28 coupled ACWR using RA on training load amount (this becomes, in theory, a measure of change)
-# move 1 day at a time as advised in Carey et al. 2017
-# function calculating sums on a sliding window of 7 days
+# calculate 7:28 coupled ACWR (this becomes, in theory, a measure of change)
+# use equation in Lolli et al. 2017, most common in football studies Wang et al. 2021.
 slide_sum = function(x){
   l = slide(x, ~sum(.), .before = 6, step = 1, .complete =TRUE)
   l = compact(l)
@@ -322,8 +321,6 @@ slide_chronic = function(x){
   l = unlist(l)
   l
 }
-
-
 
 # the first acute load can be calculated from day 22 to day 28
 # to have an equal number acute and chronic values
