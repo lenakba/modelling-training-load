@@ -114,7 +114,7 @@ calc_cumeffs_all = function(d_sim_hist, t_load_type = "amount", fvar, flag){
   if(t_load_type == "amount"){
     l_sim_tl_hist$data = l_sim_tl_hist$data %>% map(~calc_cumeff(.$t_load, fvar, flag))  
   } else if(t_load_type == "change"){
-    l_sim_tl_hist$data = l_sim_tl_hist$data %>% map(~calc_cumeff(.$t_load_change, fvar, flag)) %>% map(~lag(.))
+    l_sim_tl_hist$data = l_sim_tl_hist$data %>% map(~calc_cumeff(.$t_load_change, fvar, flag))
   }
   d_cumeffs = unnest(l_sim_tl_hist, cols = c(data)) %>% rename(cumeff = data) %>% ungroup()
   d_cumeffs
