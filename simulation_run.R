@@ -316,8 +316,8 @@ sim_fit_and_res = function(nsub, t_max, tl_values, t_load_type, tl_var, fvar, fl
   if(t_load_type == "amount"){
 
   # calc rolling average and ewma on training load amount
-  d_sim_hist_ra = function_on_list(d_sim_tl_hist, slide_ra, 28) %>% rename(ra_t_load = data)
-  d_sim_hist_ewma = function_on_list(d_sim_tl_hist, slide_ewma, 28) %>% rename(ewma_t_load = data)
+  d_sim_hist_ra = function_on_list(d_tl_hist, slide_ra, 28) %>% rename(ra_t_load = data)
+  d_sim_hist_ewma = function_on_list(d_tl_hist, slide_ewma, 28) %>% rename(ewma_t_load = data)
   d_survival_sim_cpform_mods = d_survival_sim_cpform %>% left_join(d_sim_hist_ra, by = c("id", "exit" = "day"))
   d_survival_sim_cpform_mods = d_survival_sim_cpform_mods %>% left_join(d_sim_hist_ewma, by = c("id", "exit" = "day"))
   ob_ra = onebasis(d_survival_sim_cpform_mods$ra_t_load, "poly", degree = 2)
@@ -438,7 +438,7 @@ folder_lin_exponential_decay = paste0(base_folder, "change_lin_exponential_decay
 
 
 startsim = 1
-nsim = 3
+nsim = 10
 seqsim = startsim:nsim
 set.seed(1234)
 for(i in seqsim){
