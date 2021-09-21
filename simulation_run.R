@@ -84,7 +84,8 @@ sim_tl_history = function(nsub, t_max, tl_values){
     rename(t_load = value) %>% 
     mutate(id = rep(1:nsub, each = t_max),
            day = rep(1:t_max, nsub),
-           t_load_change = lead(t_load)-t_load) 
+           t_load_change = lead(t_load)-t_load,
+           t_load_change = lag(t_load_change)) 
   d_sim_tl_hist %>% select(id, day, t_load, t_load_change)
 }
 
