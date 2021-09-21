@@ -286,6 +286,15 @@ slide_ewma = function(x){
   l
 }
 
+# function to nest the exposure history data by each individual, 
+# and run a user-specified function on each of their datasets in the list
+function_on_list = function(d_sim_hist, FUN = NULL, day_start){
+  nested_list = d_sim_hist %>% group_by(id) %>% nest()
+  nested_list$data = nested_list$data %>% map(., ~FUN(.$t_load))
+  l_unnest = unnest(nested_list, cols = c(data)) %>% ungroup() %>% mutate(day = rep(day_start:t_max, nsub)) 
+  l_unnest
+}
+
 d_sim_hist_ra = function_on_list(d_sim_tl_hist, slide_ra, 28) %>% rename(ra_t_load = data)
 d_sim_hist_ewma = function_on_list(d_sim_tl_hist, slide_ewma, 28) %>% rename(ewma_t_load = data)
 
@@ -317,14 +326,7 @@ slide_chronic = function(x){
   l
 }
 
-# function to nest the exposure history data by each individual, 
-# and run a user-specified function on each of their datasets in the list
-function_on_list = function(d_sim_hist, FUN = NULL, day_start){
-  nested_list = d_sim_hist %>% group_by(id) %>% nest()
-  nested_list$data = nested_list$data %>% map(., ~FUN(.$t_load))
-  l_unnest = unnest(nested_list, cols = c(data)) %>% ungroup() %>% mutate(day = rep(day_start:t_max, nsub)) 
-  l_unnest
-}
+
 
 # the first acute load can be calculated from day 22 to day 28
 # to have an equal number acute and chronic values
@@ -359,7 +361,7 @@ d_survival_sim_cpform_mods = d_survival_sim_cpform_mods %>%
 d_survival_sim_cpform_mods = d_survival_sim_cpform_mods %>% 
                              left_join(d_sim_hist_weekly, by = c("id", "exit" = "day"))
 
-ob_acwr = onebasis(d_survival_sim_cpform_mods$ra_t_load, "lin")
+ob_acwr = onebasis(d_survival_sim_cpform_mods$acwr, "lin")
 ob_weekly_change = onebasis(d_survival_sim_cpform_mods$ewma_t_load, "lin")
 cb_dlnm_change = crossbasis(q_mat, lag=c(lag_min, lag_max), 
                      argvar = list(fun="lin"),
