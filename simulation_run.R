@@ -202,7 +202,7 @@ ewma = function(x, n_days = lag_max){
 # this ensures that RA isn't calculated until the first 4 weeks have passed
 # the ewma function already does this
 slide_ra = function(x){
-  l = slide(x, ~ra(., 28), .before = 27, step = 1, .complete =TRUE) %>% map(last)
+  l = slide(x, ~ra(., lag_max), .before = lag_max-1, step = 1, .complete =TRUE) %>% map(last)
   l = compact(l)
   l = unlist(l)
   l
@@ -219,7 +219,7 @@ slide_sum = function(x){
 }
 
 slide_chronic = function(x){
-  l = slide(x, ~sum(.), .before = 27, step = 1, .complete =TRUE) %>% map(~./4)
+  l = slide(x, ~sum(.), .before = lag_max-1, step = 1, .complete =TRUE) %>% map(~./4)
   l = compact(l)
   l = unlist(l)
   l
