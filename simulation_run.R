@@ -84,8 +84,7 @@ sim_tl_history = function(nsub, t_max, tl_values){
     rename(t_load = value) %>% 
     mutate(id = rep(1:nsub, each = t_max),
            day = rep(1:t_max, nsub),
-           t_load_change = lead(t_load)-t_load,
-           t_load_change = lag(t_load_change)) 
+           t_load_change = lead(t_load)-t_load) 
   d_sim_tl_hist %>% select(id, day, t_load, t_load_change)
 }
 
@@ -96,7 +95,7 @@ sim_tl_history = function(nsub, t_max, tl_values){
 # fvar        the function for the effect of training load
 # flag        the function for the time-lagged effect of training load
 calc_cumeff = function(tl_hist, fvar, flag){
-  l_effect_seqs = slide(tl_hist, ~pluck(.), .before = lag_max, step = 1, .complete = FALSE)
+  l_effect_seqs = slide(tl_hist, ~pluck(.), .before = lag_max-1, step = 1, .complete = FALSE)
   l_effect_lags = l_effect_seqs %>% map(~(length(.)-1):0)
   l_flin = l_effect_seqs %>% map(~fvar(.))
   l_wdecay = l_effect_lags %>% map(~flag(.))
@@ -115,7 +114,7 @@ calc_cumeffs_all = function(d_sim_hist, t_load_type = "amount", fvar, flag){
   if(t_load_type == "amount"){
     l_sim_tl_hist$data = l_sim_tl_hist$data %>% map(~calc_cumeff(.$t_load, fvar, flag))  
   } else if(t_load_type == "change"){
-    l_sim_tl_hist$data = l_sim_tl_hist$data %>% map(~calc_cumeff(.$t_load_change, fvar, flag))
+    l_sim_tl_hist$data = l_sim_tl_hist$data %>% map(~calc_cumeff(.$t_load_change, fvar, flag)) %>% map(~lag(.))
   }
   d_cumeffs = unnest(l_sim_tl_hist, cols = c(data)) %>% rename(cumeff = data) %>% ungroup()
   d_cumeffs
@@ -439,8 +438,8 @@ seqsim = startsim:nsim
 set.seed(1234)
 for(i in seqsim){
   # amount of training load
-  # sim_fit_and_res(nsub, t_max, tl_valid, "amount", tl_var = t_load, fvar = fj, flag = wconst, 
-                  predvalues = tl_predvalues, i = i, folder = folder_j_constant)
+  #sim_fit_and_res(nsub, t_max, tl_valid, "amount", tl_var = t_load, fvar = fj, flag = wconst, 
+   #               predvalues = tl_predvalues, i = i, folder = folder_j_constant)
   # sim_fit_and_res(nsub, t_max, tl_valid, "amount", tl_var = t_load, fvar = fj, flag = wdecay, 
   #                 predvalues = tl_predvalues, i = i, folder = folder_j_decay)
   # sim_fit_and_res(nsub, t_max, tl_valid, "amount", tl_var = t_load, fvar = fj, flag = wexponential_decay, 
