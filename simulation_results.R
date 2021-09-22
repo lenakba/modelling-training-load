@@ -163,6 +163,7 @@ d_res_amount = d_res_amount %>% group_by(relationship, method, rep) %>%
                          aw = average_width(ci_high, ci_low),
                          bias = raw_bias(cumul, true_cumul_coefs), 
                          rmse = rmse(cumul, true_cumul_coefs),
+                         mcse_bias = mcse_bias(cumul, true_cumul_coefs, nsims),
                          mcse_rmse = mcse_rmse(cumul, true_cumul_coefs, nsims),
                          mcse_coverage = mcse_coverage(ci_low, ci_high, true_cumul_coefs, n(), nsims)) %>% 
                   ungroup()
