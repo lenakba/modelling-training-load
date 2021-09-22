@@ -32,43 +32,7 @@ tl_predvalues = seq(min(tl_observed), max(tl_observed), 25)
 tl_predvalues_change = seq(min(tl_observed_change), max(tl_observed_change), 25)
 
 ###################################Training load and lag structure functions###########################################
-# FUNCTIONS TO COMPUTE THE LOGIT AND INVERSE LOGIT TRANSFORMATIONS
-# logit = function(prob) log(prob/(1-prob))
-# invlogit = function(linpred) exp(linpred)/(1+exp(linpred))
-
-# functions for simulating the effect of the amount of training load on injury risk (J-shape)
-# and the effect of amount of change of training load on injury risk (linear)
-# the only exception is for the lag-function wdirection_flip, the linear function will be used instead of J-shape
-fj = function(x)case_when(x < 600 ~ ((600-x)/200)^1.5/10,
-                          x >= 600 ~ ((x-600)/200)^3/30)
-flin = function(x) 0.0009*x
-
-# functions to simulate the lag structure for the
-# long-term time-varying effect of training load
-# 4 scenarios: constant, decay, exponential decay, decay from positive to negative effect
-wconst = function(lag)lag-lag+0.80
-wdecay = function(lag)exp(-lag/100)
-wexponential_decay = function(lag)exp(-lag/10)^2
-wdirection_flip = function(lag)case_when(lag <= 6 ~ exp(-lag/10)^2,
-                                         lag >  6 ~ -exp(lag/50)^2)
-
-# create the f*w functions for amount of training load
-fjconst = function(x, lag) fj(x) * wconst(lag)
-fjdecay = function(x, lag) fj(x) * wdecay(lag)
-fjexponential_decay = function(x, lag) fj(x) * wexponential_decay(lag)
-flindirection_flip = function(x, lag) flin(x) * wdirection_flip(lag)
-
-# f*w functions for change in load
-flinconst = function(x, lag) flin(x) * wconst(lag)
-flindecay = function(x, lag) flin(x) * wdecay(lag)
-flinexponential_decay = function(x, lag) flin(x) * wexponential_decay(lag)
-
-# calculate coefficients for each combination of f*w
-calc_coefs = function(x, lag, FUN){
-  coefs = outer(x, lag, FUN)
-  dimnames(coefs) = list(x, paste(lag))
-  coefs
-}
+source("functions-relationships.R", encoding = "UTF-8")
 
 #################################################Simulating exposure histories###################################
 # simulate exposure histories
@@ -233,62 +197,6 @@ function_on_list = function(d_sim_hist, FUN = NULL, day_start){
   l_unnest
 }
 
-################################################## Calculate numeric performance measures ############################
-
-aic_ra = AIC(fit_ra)
-aic_ewma = AIC(fit_ewma)
-aic_dlnm = AIC(fit_dlnm)  
-
-tl_predvalues_ra = seq(min(d_survival_sim_cpform_mods$ra_t_load), max(d_survival_sim_cpform_mods$ra_t_load), 25) 
-tl_predvalues_ewma = seq(min(d_survival_sim_cpform_mods$ewma_t_load), max(d_survival_sim_cpform_mods$ewma_t_load), 25)
-
-cp_preds_ra = crosspred(ob_ra, fit_ra, at = tl_predvalues, cen = 600, cumul = TRUE)
-cp_preds_ewma = crosspred(ob_ewma, fit_ewma, at = tl_predvalues, cen = 600, cumul = TRUE)
-cp_preds_dlnm = crosspred(cb_dlnm, fit_dlnm, at = tl_predvalues, cen = 600, cumul = TRUE)
-
-true_effect = calc_coefs(tl_predvalues, lag_seq, fjdecay)
-truecumcoefs = rowSums(true_effect)
-
-cumeff_preds_ra = cp_preds_ra$allfit
-cumeff_preds_ewma = cp_preds_ewma$allfit
-cumeff_preds_dlnm = cp_preds_dlnm$allfit
-
-coverage = function(estimate, target, se){
-  qn = qnorm(0.95)  
-  coef_high = estimate + qn*se
-  coef_low = estimate - qn*se
-  coverage = target <= coef_high & target >= coef_low
-  numerator = sum(coverage == TRUE)
-  denominator = length(coverage)
-  coverage_prop = numerator/denominator
-  coverage_prop
-}
-
-coverage_ra = coverage(cumeff_preds_ra, truecumcoefs, cp_preds_ra$allse)
-coverage_ewma = coverage(cumeff_preds_ewma, truecumcoefs, cp_preds_ewma$allse)
-coverage_dlnm = coverage(cumeff_preds_dlnm, truecumcoefs, cp_preds_dlnm$allse)
-
-average_width = function(estimate, target, se){
-  qn = qnorm(0.95)  
-  coef_high = estimate + qn*se
-  coef_low = estimate - qn*se
-  aw = mean(coef_high-coef_low)
-  aw
-}
-
-aw_ra = average_width(cumeff_preds_ra, truecumcoefs, cp_preds_ra$allse)
-aw_ewma = average_width(cumeff_preds_ewma, truecumcoefs, cp_preds_ewma$allse)
-aw_dlnm = average_width(cumeff_preds_dlnm, truecumcoefs, cp_preds_dlnm$allse)
-
-# Root-mean-squared-error
-rmse = function(estimate, target){
-  sqrt(mean((estimate - target)^2)) 
-}
-
-rmse_ra = rmse(cumeff_preds_ra, truecumcoefs)
-rmse_ewma = rmse(cumeff_preds_ewma, truecumcoefs)
-rmse_dlnm = rmse(cumeff_preds_dlnm, truecumcoefs)
-
 ######################################################## Helper function which does all of the above
 
 sim_fit_and_res = function(nsub, t_max, tl_values, t_load_type, tl_var, fvar, flag, predvalues, i, folder){
@@ -358,7 +266,7 @@ sim_fit_and_res = function(nsub, t_max, tl_values, t_load_type, tl_var, fvar, fl
     d_sim_hist_acute = function_on_list(d_sim_tl_hist_acwr_acute, FUN = slide_sum, lag_max) %>% rename(acute_load = data)
     d_sim_hist_chronic = function_on_list(d_tl_hist, FUN = slide_chronic, lag_max) %>% rename(chronic_load = data)
     
-    # calculate the ACWR be acute/chronic
+    # calculate the ACWR acute/chronic
     d_sim_hist_acwr = d_sim_hist_acute %>% 
       left_join(d_sim_hist_chronic, by = c("id", "day")) %>% 
       mutate(acwr = acute_load/chronic_load)
@@ -385,24 +293,30 @@ sim_fit_and_res = function(nsub, t_max, tl_values, t_load_type, tl_var, fvar, fl
     d_survival_sim_cpform_mods = d_survival_sim_cpform_mods %>% 
       left_join(d_sim_hist_weekly, by = c("id", "exit" = "day"))
     
+    # calculate onebasis or crossbasis for the cox model
     ob_acwr = onebasis(d_survival_sim_cpform_mods$acwr, "lin")
     ob_weekly_change = onebasis(d_survival_sim_cpform_mods$weekly_change, "lin")
     cb_dlnm_change = crossbasis(q_mat, lag=c(lag_min, lag_max), 
                                 argvar = list(fun="lin"),
                                 arglag = list(fun="ns", knots = 3))
     
+    # fit the cox models
     fit_acwr = coxph(Surv(enter, exit, event) ~ ob_acwr, d_survival_sim_cpform_mods, y = FALSE, ties = "efron")
     fit_weekly_change = coxph(Surv(enter, exit, event) ~ ob_weekly_change, d_survival_sim_cpform_mods, y = FALSE, ties = "efron")
     fit_dlnm_change = coxph(Surv(enter, exit, event) ~ cb_dlnm_change, d_survival_sim_cpform_mods, y = FALSE, ties = "efron")
     list_fits = list(fit_acwr, fit_weekly_change, fit_dlnm_change)
     
+    # since ACWR and weekly change is on a different scale than absolute difference,
+    # we create a vector of values to predict across for them
     predvalues_acwr = seq(min(d_sim_hist_acwr$acwr, na.rm = TRUE), max(d_sim_hist_acwr$acwr, na.rm = TRUE), 25)
     predvalues_wchange = seq(min(d_sim_hist_weekly$weekly_change, na.rm = TRUE), max(d_sim_hist_weekly$weekly_change, na.rm = TRUE), 25)
     
+    # predict cumulative effects with the DLNM syntax
     cp_preds_acwr = crosspred(ob_acwr, fit_acwr, at = predvalues_acwr, cen = 1, cumul = TRUE)
     cp_preds_weekly_change = crosspred(ob_weekly_change, fit_weekly_change, at = predvalues_wchange, cen = 0, cumul = TRUE)
     cp_preds_dlnm = crosspred(cb_dlnm_change, fit_dlnm_change, at = predvalues, cen = 0, cumul = TRUE)
     
+    # create dataset with predicted values and AIC
     d_acwr = bind_cols(t_load_acwr = predvalues_acwr, 
                      cumul = cp_preds_acwr$allfit, 
                      se = cp_preds_acwr$allse,
@@ -421,10 +335,10 @@ sim_fit_and_res = function(nsub, t_max, tl_values, t_load_type, tl_var, fvar, fl
                        aic = AIC(fit_dlnm_change),
                        method = "dlnm")
     
-    d_res = bind_rows(d_acwr, d_weekly_change, d_dlnm)
+    d_res = bind_rows(d_acwr, d_weekly_change, d_dlnm) 
   }
   saveRDS(list_fits, file = paste0(folder, "fits_",i,"_.rds"))
-  saveRDS(d_res, file = paste0(folder, "res_",i,"_.rds"))
+  saveRDS(d_res %>% mutate(rep = i), file = paste0(folder, "res_",i,"_.rds"))
 }
 
 base_folder = "O:\\Prosjekter\\Bache-Mathiesen-003-modelling-training-load\\Data\\simulations\\"
