@@ -28,7 +28,6 @@ file_types = c("fits", "res")
 # perf_estimates_all = read_delim("simulation_results_perfparams.csv", delim = ";")
 
 #------------amount, j constant
-# reading the simulated results from fits
 files_fits = list.files(path = folder_j_constant)
 n_sim = length(files_fits)/length(file_types) # divide by the number of file types
 l_fits_j_constant = list()
@@ -39,57 +38,80 @@ for(i in 1:n_sim){
   l_fits_j_constant = append(l_fits_j_constant, temp_data_fits)
   d_res_j_constant = rbind(d_res_j_constant, temp_data_res)
 }
+d_res_j_constant = d_res_j_constant %>% mutate(relationship = "Constant")
+
+#------------amount, j decay
+files_fits = list.files(path = folder_j_decay)
+n_sim = length(files_fits)/length(file_types) # divide by the number of file types
+l_fits_j_decay = list()
+d_res_j_decay = data.frame()
+for(i in 1:n_sim){
+  temp_data_fits = readRDS(paste0(folder_j_decay, "fits_",i,"_.rds"))
+  temp_data_res = readRDS(paste0(folder_j_decay, "res_",i,"_.rds"))
+  l_fits_j_decay = append(l_fits_j_decay, temp_data_fits)
+  d_res_j_decay = rbind(d_res_j_decay, temp_data_res)
+}
+d_res_j_decay = d_res_j_decay %>% mutate(relationship = "Decay")
+
+#------------amount, j exponential decay
+files_fits = list.files(path = folder_j_exponential_decay)
+n_sim = length(files_fits)/length(file_types) # divide by the number of file types
+l_fits_j_exponential_decay = list()
+d_res_j_exponential_decay = data.frame()
+for(i in 1:n_sim){
+  temp_data_fits = readRDS(paste0(folder_j_exponential_decay, "fits_",i,"_.rds"))
+  temp_data_res = readRDS(paste0(folder_j_exponential_decay, "res_",i,"_.rds"))
+  l_fits_j_exponential_decay = append(l_fits_j_exponential_decay, temp_data_fits)
+  d_res_j_exponential_decay = rbind(d_res_j_exponential_decay, temp_data_res)
+}
+d_res_j_exponential_decay = d_res_j_exponential_decay %>% mutate(relationship = "Exponential Decay")
+l_res = list(d_res_j_constant, d_res_j_decay, d_res_j_exponential_decay)
 
 ###################################Source functions needed to calc performance measures###########################################
 
 # fetching functions for performance parameters
+# and for estimating the true relationship
 # we assume working directory is the same location as this script
-#source("performance-measure-functions.R", encoding = "UTF-8")
-
+source("functions-performance.R", encoding = "UTF-8")
 source("functions-relationships.R", encoding = "UTF-8")
 
+# list of relationship functions
+fw_funs = list(fjconst, fjdecay, fjexponential_decay)
+fw_funs_change = list(flinconst, flindecay, flinexponential_decay)
+
 ###################################Calculate performance############################################
-
+# lag set at 4 weeks (28) as is often used in tl studies
+lag_min = 0
+lag_max = 28
+lag_seq = lag_min:lag_max # number of days before current day assumed to affect risk of injury
 tl_predvalues = d_res_j_constant %>% filter(rep == 1, method == "ra") %>% pull(t_load)
-true_effect = calc_coefs(tl_predvalues, lag_seq, fjdecay)
-truecumcoefs = rowSums(true_effect)
 
-cumeff_preds_ra = cp_preds_ra$allfit
-cumeff_preds_ewma = cp_preds_ewma$allfit
-cumeff_preds_dlnm = cp_preds_dlnm$allfit
-
-coverage = function(estimate, target, se){
-  qn = qnorm(0.95)  
-  coef_high = estimate + qn*se
-  coef_low = estimate - qn*se
-  coverage = target <= coef_high & target >= coef_low
-  numerator = sum(coverage == TRUE)
-  denominator = length(coverage)
-  coverage_prop = numerator/denominator
-  coverage_prop
+# function for adding the true cumulative effect given the fw-function
+add_true_coefs = function(d_res, tl_predvalues, lag_seq, fw){
+  true_effect = calc_coefs(tl_predvalues, lag_seq, fw)
+  truecumcoefs = rowSums(true_effect_j_constant)
+  d_res = d_res %>% mutate(true_cumul_coefs = truecumcoefs)
+  d_res
 }
 
-coverage_ra = coverage(cumeff_preds_ra, truecumcoefs, cp_preds_ra$allse)
-coverage_ewma = coverage(cumeff_preds_ewma, truecumcoefs, cp_preds_ewma$allse)
-coverage_dlnm = coverage(cumeff_preds_dlnm, truecumcoefs, cp_preds_dlnm$allse)
+# group by method and simulation number (rep)
+# then use map2 to match the right dataset to the right fw function
+# and add the correct cumulative effect
+# collapse to dataset
+d_res = l_res %>% 
+  map(.%>% group_by(method, rep)) %>% 
+  map2(.x = .,
+       .y = fw_funs,
+       ~add_true_coefs(.x, tl_predvalues, lag_seq, .y)) %>% bind_rows()
 
-average_width = function(estimate, target, se){
-  qn = qnorm(0.95)  
-  coef_high = estimate + qn*se
-  coef_low = estimate - qn*se
-  aw = mean(coef_high-coef_low)
-  aw
-}
+d_res = d_res %>% group_by(relationship, method, rep) %>% 
+                  mutate(ci_high = calc_ci(cumul, se, "high"), 
+                         ci_low = calc_ci(cumul, se, "low"),
+                         coverage = coverage(ci_high, ci_low, true_cumul_coefs),
+                         aw = average_width(ci_high, ci_low),
+                         rmse = rmse(cumul, true_cumul_coefs)) %>% 
+                  ungroup()
 
-aw_ra = average_width(cumeff_preds_ra, truecumcoefs, cp_preds_ra$allse)
-aw_ewma = average_width(cumeff_preds_ewma, truecumcoefs, cp_preds_ewma$allse)
-aw_dlnm = average_width(cumeff_preds_dlnm, truecumcoefs, cp_preds_dlnm$allse)
+perf_cols = c("aic", "coverage", "aw", "rmse")
+d_perf_params = d_res %>% group_by(relationship, method) %>% summarise_at(vars(perf_cols), mean)
 
-# Root-mean-squared-error
-rmse = function(estimate, target){
-  sqrt(mean((estimate - target)^2)) 
-}
-
-rmse_ra = rmse(cumeff_preds_ra, truecumcoefs)
-rmse_ewma = rmse(cumeff_preds_ewma, truecumcoefs)
-rmse_dlnm = rmse(cumeff_preds_dlnm, truecumcoefs)
