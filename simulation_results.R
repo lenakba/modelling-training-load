@@ -161,10 +161,18 @@ d_res_amount = d_res_amount %>% group_by(relationship, method, rep) %>%
                          ci_low = calc_ci(cumul, se, "low"),
                          coverage = coverage(ci_high, ci_low, true_cumul_coefs),
                          aw = average_width(ci_high, ci_low),
+                         bias = raw_bias(cumul, true_cumul_coefs), 
                          rmse = rmse(cumul, true_cumul_coefs),
                          mcse_rmse = mcse_rmse(cumul, true_cumul_coefs, nsims),
                          mcse_coverage = mcse_coverage(ci_low, ci_high, true_cumul_coefs, n(), nsims)) %>% 
                   ungroup()
+
+# find the sample size after 500 sims
+sample_size_needed = d_res_amount  %>% 
+  group_by(relationship, method) %>% 
+  summarise(variance_est = var(bias, na.rm = TRUE), n_sim = (variance_est^2)/0.25) %>% 
+  ungroup() %>% summarise(n_sim_needed = max(n_sim)) %>% 
+  pull(n_sim_needed)
 
 perf_cols = c("aic", "coverage", "aw", "rmse")
 d_perf_params_amount = d_res_amount %>% group_by(relationship, method) %>% summarise_at(vars(perf_cols, starts_with("mcse")), mean)
