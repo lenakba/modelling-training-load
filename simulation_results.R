@@ -155,16 +155,19 @@ d_res_amount = l_res_amount %>%
        .y = fw_funs,
        ~add_true_coefs(.x, tl_predvalues, lag_seq, .y)) %>% bind_rows()
 
+nsims = max(d_res_amount$rep)
 d_res_amount = d_res_amount %>% group_by(relationship, method, rep) %>% 
                   mutate(ci_high = calc_ci(cumul, se, "high"), 
                          ci_low = calc_ci(cumul, se, "low"),
                          coverage = coverage(ci_high, ci_low, true_cumul_coefs),
                          aw = average_width(ci_high, ci_low),
-                         rmse = rmse(cumul, true_cumul_coefs)) %>% 
+                         rmse = rmse(cumul, true_cumul_coefs),
+                         mcse_rmse = mcse_rmse(cumul, true_cumul_coefs, nsims),
+                         mcse_coverage = mcse_coverage(ci_low, ci_high, true_cumul_coefs, n(), nsims)) %>% 
                   ungroup()
 
 perf_cols = c("aic", "coverage", "aw", "rmse")
-d_perf_params_amount = d_res_amount %>% group_by(relationship, method) %>% summarise_at(vars(perf_cols), mean)
+d_perf_params_amount = d_res_amount %>% group_by(relationship, method) %>% summarise_at(vars(perf_cols, starts_with("mcse")), mean)
 
 #---------------Change
 d_res_change = l_res_change %>% bind_rows()
