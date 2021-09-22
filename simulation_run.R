@@ -333,18 +333,22 @@ sim_fit_and_res = function(nsub, t_max, tl_values, t_load_type, tl_var, fvar, fl
   d_ra = bind_cols(t_load = predvalues, 
                    cumul = cp_preds_ra$allfit, 
                    se = cp_preds_ra$allse,
-                   aic = AIC(fit_ra))
+                   aic = AIC(fit_ra),
+                   method = "ra")
   
   d_ewma = bind_cols(t_load = predvalues, 
                    cumul = cp_preds_ewma$allfit, 
                    se = cp_preds_ewma$allse,
-                   aic = AIC(fit_ewma))
+                   aic = AIC(fit_ewma),
+                   method = "ewma")
   
   d_dlnm = bind_cols(t_load = predvalues, 
                    cumul = cp_preds_dlnm$allfit, 
                    se = cp_preds_dlnm$allse,
-                   aic = AIC(fit_dlnm))
-  list_res = list(d_ra, d_ewma, d_dlnm)
+                   aic = AIC(fit_dlnm),
+                   method = "dlnm")
+  
+  d_res = bind_rows(d_ra, d_ewma, d_dlnm)
   
   } else if(t_load_type == "change"){
     
@@ -402,21 +406,25 @@ sim_fit_and_res = function(nsub, t_max, tl_values, t_load_type, tl_var, fvar, fl
     d_acwr = bind_cols(t_load_acwr = predvalues_acwr, 
                      cumul = cp_preds_acwr$allfit, 
                      se = cp_preds_acwr$allse,
-                     aic = AIC(fit_acwr))
+                     aic = AIC(fit_acwr),
+                     method = "acwr")
     
-    d_ewma = bind_cols(t_load_weekly_change = predvalues_wchange, 
+    d_weekly_change = bind_cols(t_load_weekly_change = predvalues_wchange, 
                        cumul = cp_preds_weekly_change$allfit, 
                        se = cp_preds_weekly_change$allse,
-                       aic = AIC(fit_weekly_change))
+                       aic = AIC(fit_weekly_change),
+                       method = "weekly_change")
     
     d_dlnm = bind_cols(t_load_change = predvalues, 
                        cumul = cp_preds_dlnm$allfit, 
                        se = cp_preds_dlnm$allse,
-                       aic = AIC(fit_dlnm_change))
-    list_res = list(d_acwr, d_ewma, d_dlnm)
+                       aic = AIC(fit_dlnm_change),
+                       method = "dlnm")
+    
+    d_res = bind_rows(d_acwr, d_weekly_change, d_dlnm)
   }
   saveRDS(list_fits, file = paste0(folder, "fits_",i,"_.rds"))
-  saveRDS(list_res, file = paste0(folder, "res_",i,"_.rds"))
+  saveRDS(d_res, file = paste0(folder, "res_",i,"_.rds"))
 }
 
 base_folder = "O:\\Prosjekter\\Bache-Mathiesen-003-modelling-training-load\\Data\\simulations\\"
@@ -433,7 +441,7 @@ folder_lin_exponential_decay = paste0(base_folder, "change_lin_exponential_decay
 
 
 startsim = 1
-nsim = 10
+nsim = 4
 seqsim = startsim:nsim
 set.seed(1234)
 for(i in seqsim){
