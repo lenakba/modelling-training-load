@@ -32,3 +32,30 @@ average_width = function(coef_high, coef_low){
 rmse = function(estimate, target){
   sqrt(mean((estimate - target)^2)) 
 }
+
+# Monte Carlo Standard Error functions for the different performance measures
+# monte carlo standard error also requires the number of simulations (runs, permutations)
+mcse_rmse = function(estimate, target, nsim){
+  
+  d_se = bind_cols(data.frame(estimate), data.frame(target)) 
+  d_est = data.frame(numeric(nrow(d_se)))
+  colnames(d_est) = "rmse_j"
+  for(i in 1:nrow(d_se)){
+    d_temp = d_se[-i,]
+    rmse = rmse(d_temp$estimate, d_temp$target)
+    d_est[i,1] = rmse
+  }
+  
+  rmse_j = d_est$rmse_j
+  main_rmse = rmse(estimate, target)
+  mcse = sqrt(sum((rmse_j-main_rmse)^2)/(nsim*(nsim-1)))
+  mcse
+}
+
+# the denominator is the number of CI values
+mcse_coverage = function(ci_low, ci_high, target, denominator, nsim){
+  is_covered = ifelse((ci_low < target) & (target < ci_high), 1, 0)
+  cr = 100*(sum(is_covered == 1, na.rm = TRUE)/denominator)
+  mcse = sqrt(abs(((95-cr)*(5-cr)))/nsim)
+  mcse
+}
