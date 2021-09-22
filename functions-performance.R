@@ -23,9 +23,14 @@ coverage = function(ci_high, ci_low, target){
 }
 
 # calculate the average width of confidence intervals
-average_width = function(coef_high, coef_low){
-  aw = mean(coef_high-coef_low)
+average_width = function(ci_high, ci_low){
+  aw = mean(ci_high-ci_low)
   aw
+}
+
+# the absolute bias
+raw_bias = function(estimate, target){
+  mean(abs(estimate - target))
 }
 
 # Calculate the root-mean-squared-error compared to the true cumulative effects
@@ -35,6 +40,23 @@ rmse = function(estimate, target){
 
 # Monte Carlo Standard Error functions for the different performance measures
 # monte carlo standard error also requires the number of simulations (runs, permutations)
+mcse_bias = function(estimate, target, nsim){
+  
+  d_se = bind_cols(data.frame(estimate), data.frame(target)) 
+  d_est = data.frame(numeric(nrow(d_se)))
+  colnames(d_est) = "bias_j"
+  for(i in 1:nrow(d_se)){
+    d_temp = d_se[-i,]
+    rb = raw_bias(d_temp$estimate, d_temp$target)
+    d_est[i,1] = rb
+  }
+  
+  bias_j = d_est$bias_j
+  main_rb = raw_bias(estimate, target)
+  mcse = sqrt(sum((bias_j-main_rb)^2)/(nsim*(nsim-1)))
+  mcse
+}
+
 mcse_rmse = function(estimate, target, nsim){
   
   d_se = bind_cols(data.frame(estimate), data.frame(target)) 
