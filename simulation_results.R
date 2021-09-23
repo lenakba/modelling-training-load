@@ -138,7 +138,7 @@ tl_predvalues_change = d_res_lin_constant %>% filter(rep == 1, method == "dlnm")
 # function for adding the true cumulative effect given the fw-function
 add_true_coefs = function(d_res, tl_predvalues, lag_seq, fw){
   true_effect = calc_coefs(tl_predvalues, lag_seq, fw)
-  truecumcoefs = rowSums(true_effect_j_constant)
+  truecumcoefs = rowSums(true_effect)
   d_res = d_res %>% mutate(true_cumul_coefs = truecumcoefs)
   d_res
 }
