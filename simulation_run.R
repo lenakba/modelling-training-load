@@ -210,11 +210,13 @@ sim_fit_and_res = function(nsub, t_max, tl_values, t_load_type, tl_var, fvar, fl
   # arrange the exposure history in wide format in a matrix
   # which is neeeded for calculating the q-matrix for the crossbasis
   d_sim_tl_hist_spread_day = 
-    d_tl_hist %>% select(id, day, !!tl_var) %>% 
+    d_tl_hist %>% select(id, day, !!tl_var) %>% filter(day >= lag_max) %>% 
     pivot_wider(names_from = day, values_from = !!tl_var) %>% select(-id) %>% as.matrix
   
+  # the DLNM data has to be cut the lag_max (28) days 
+  # to be comparable with other methods (run on the same sample size)
   d_survival_sim_cpform = counting_process_form(d_survival_sim)
-  q_mat = from_sim_surv_to_q(d_survival_sim, d_sim_tl_hist_spread_day)
+  q_mat = calc_q_matrix(d_survival_sim_cpform %>% filter(exit >= lag_max), d_sim_tl_hist_spread_day)
 
   if(t_load_type == "amount"){
 
@@ -223,6 +225,11 @@ sim_fit_and_res = function(nsub, t_max, tl_values, t_load_type, tl_var, fvar, fl
   d_sim_hist_ewma = function_on_list(d_tl_hist, ewma, lag_max) %>% rename(ewma_t_load = data)
   d_survival_sim_cpform_mods = d_survival_sim_cpform %>% left_join(d_sim_hist_ra, by = c("id", "exit" = "day"))
   d_survival_sim_cpform_mods = d_survival_sim_cpform_mods %>% left_join(d_sim_hist_ewma, by = c("id", "exit" = "day"))
+  
+  # remove the first 28 rows for comparability
+  d_survival_sim_cpform_mods = d_survival_sim_cpform_mods %>% filter(exit >= 28)
+  
+  # calculate one- and crossbasis for the model
   ob_ra = onebasis(d_survival_sim_cpform_mods$ra_t_load, "poly", degree = 2)
   ob_ewma = onebasis(d_survival_sim_cpform_mods$ewma_t_load, "poly", degree = 2)
   cb_dlnm = crossbasis(q_mat, lag=c(lag_min, lag_max), 
@@ -293,6 +300,9 @@ sim_fit_and_res = function(nsub, t_max, tl_values, t_load_type, tl_var, fvar, fl
     d_survival_sim_cpform_mods = d_survival_sim_cpform_mods %>% 
       left_join(d_sim_hist_weekly, by = c("id", "exit" = "day"))
     
+    # remove the first 28 rows for comparability
+    d_survival_sim_cpform_mods = d_survival_sim_cpform_mods %>% filter(exit >= 28)
+    
     # calculate onebasis or crossbasis for the cox model
     ob_acwr = onebasis(d_survival_sim_cpform_mods$acwr, "lin")
     ob_weekly_change = onebasis(d_survival_sim_cpform_mods$weekly_change, "lin")
@@ -308,13 +318,13 @@ sim_fit_and_res = function(nsub, t_max, tl_values, t_load_type, tl_var, fvar, fl
     
     # since ACWR and weekly change is on a different scale than absolute difference,
     # we create a vector of values to predict across for them
-    predvalues_acwr = seq(min(d_sim_hist_acwr$acwr, na.rm = TRUE), max(d_sim_hist_acwr$acwr, na.rm = TRUE), 25)
-    predvalues_wchange = seq(min(d_sim_hist_weekly$weekly_change, na.rm = TRUE), max(d_sim_hist_weekly$weekly_change, na.rm = TRUE), 25)
+    predvalues_acwr = seq(min(d_sim_hist_acwr$acwr, na.rm = TRUE), max(d_sim_hist_acwr$acwr, na.rm = TRUE), 0.05)
+    predvalues_wchange = seq(min(d_sim_hist_weekly$weekly_change, na.rm = TRUE), max(d_sim_hist_weekly$weekly_change, na.rm = TRUE), 100)
     
     # predict cumulative effects with the DLNM syntax
-    cp_preds_acwr = crosspred(ob_acwr, fit_acwr, at = predvalues_acwr, cen = 1, cumul = TRUE)
-    cp_preds_weekly_change = crosspred(ob_weekly_change, fit_weekly_change, at = predvalues_wchange, cen = 0, cumul = TRUE)
-    cp_preds_dlnm = crosspred(cb_dlnm_change, fit_dlnm_change, at = predvalues, cen = 0, cumul = TRUE)
+    cp_preds_acwr = crosspred(ob_acwr, fit_acwr, at = predvalues_acwr, cumul = TRUE)
+    cp_preds_weekly_change = crosspred(ob_weekly_change, fit_weekly_change, at = predvalues_wchange, cumul = TRUE)
+    cp_preds_dlnm = crosspred(cb_dlnm_change, fit_dlnm_change, at = predvalues, cen = 600, cumul = TRUE)
     
     # create dataset with predicted values and AIC
     d_acwr = bind_cols(t_load_acwr = predvalues_acwr, 
@@ -368,7 +378,7 @@ for(i in seqsim){
                   predvalues = tl_predvalues, i = i, folder = folder_j_exponential_decay)
   
   # change in training load
-  sim_fit_and_res(nsub, t_max, tl_valid, "change", tl_var = t_load_change, fvar = flin, flag = wconst, 
+  sim_fit_and_res(nsub, t_max, tl_valid, "change", tl_var = t_load_change, fvar = flin, flag = wconst,
                   predvalues = tl_predvalues_change, i = i, folder = folder_lin_constant)
   sim_fit_and_res(nsub, t_max, tl_valid, "change", tl_var = t_load_change, fvar = flin, flag = wdecay,
                   predvalues = tl_predvalues_change, i = i, folder = folder_lin_decay)
