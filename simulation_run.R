@@ -301,7 +301,7 @@ sim_fit_and_res = function(nsub, t_max, tl_values, t_load_type, tl_var, fvar, fl
       left_join(d_sim_hist_weekly, by = c("id", "exit" = "day"))
     
     # remove the first 28 rows for comparability
-    d_survival_sim_cpform_mods = d_survival_sim_cpform_mods %>% filter(exit >= 28)
+    d_survival_sim_cpform_mods = d_survival_sim_cpform_mods %>% filter(exit >= lag_max)
     
     # calculate onebasis or crossbasis for the cox model
     ob_acwr = onebasis(d_survival_sim_cpform_mods$acwr, "lin")
