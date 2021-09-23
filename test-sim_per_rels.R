@@ -169,7 +169,7 @@ calc_cumeffs_all = function(d_sim_hist, t_load_type = "amount", fvar, flag){
   if(t_load_type == "amount"){
     l_sim_tl_hist$data = l_sim_tl_hist$data %>% map(~calc_cumeff(.$t_load, fvar, flag))  
   } else if(t_load_type == "change"){
-    l_sim_tl_hist$data = l_sim_tl_hist$data %>% map(~calc_cumeff(.$t_load_change, fvar, flag)) %>% map(~lag(.))
+    l_sim_tl_hist$data = l_sim_tl_hist$data %>% map(~calc_cumeff(.$t_load_change, fvar, flag))
   }
   d_cumeffs = unnest(l_sim_tl_hist, cols = c(data)) %>% rename(cumeff = data) %>% ungroup()
   d_cumeffs
@@ -201,7 +201,8 @@ sim_survdata = function(nsub, t_max, tl_values, t_load_type, fvar, flag){
   d_survival_sim
 } 
 set.seed(1234)
-d_survival_sim = sim_survdata(nsub, t_max, tl_valid, t_load_type = "amount", fvar = fj, flag = wdecay)
+d_survival_sim = sim_survdata(nsub, t_max, tl_valid, t_load_type = "change", fvar = flin, flag = wdecay)
+
 ########################################Define the crossbasis for the DLNM method#####################
 
 # function to arrange the simulated survival data in counting process form
@@ -247,11 +248,12 @@ from_sim_surv_to_q = function(d_survival_sim, d_tl_hist_wide){
 # arrange the exposure history in wide format in a matrix
 # which is neeeded for calculating the q-matrix for the crossbasis
 d_sim_tl_hist_spread_day = 
-  d_sim_tl_hist %>% select(-t_load_change) %>% 
-  pivot_wider(names_from = day, values_from = t_load) %>% select(-id) %>% as.matrix
+  d_sim_tl_hist %>% filter(day >= 28) %>% select(-t_load) %>% 
+  pivot_wider(names_from = day, values_from = t_load_change) %>% select(-id) %>% as.matrix
 
 d_survival_sim_cpform = counting_process_form(d_survival_sim)
-q_mat = from_sim_surv_to_q(d_survival_sim, d_sim_tl_hist_spread_day)
+q_mat = calc_q_matrix(d_survival_sim_cpform %>% filter(exit >= lag_max), d_sim_tl_hist_spread_day)
+
 
 ####################################### Modify training load with different methods ####################################
 
@@ -354,8 +356,10 @@ d_survival_sim_cpform_mods = d_survival_sim_cpform_mods %>%
 d_survival_sim_cpform_mods = d_survival_sim_cpform_mods %>% 
                              left_join(d_sim_hist_weekly, by = c("id", "exit" = "day"))
 
+d_survival_sim_cpform_mods = d_survival_sim_cpform_mods %>% filter(exit >= 28)
+
 ob_acwr = onebasis(d_survival_sim_cpform_mods$acwr, "lin")
-ob_weekly_change = onebasis(d_survival_sim_cpform_mods$ewma_t_load, "lin")
+ob_weekly_change = onebasis(d_survival_sim_cpform_mods$weekly_change, "lin")
 cb_dlnm_change = crossbasis(q_mat, lag=c(lag_min, lag_max), 
                      argvar = list(fun="lin"),
                      arglag = list(fun="ns", knots = 3))
@@ -367,9 +371,15 @@ cox_basis = function(d_sim_surv, basis){
   eval_bare(expr(coxph(Surv(enter, exit, event) ~ !!basis, d_sim_surv, y = FALSE, ties = "efron")))
 }
 
+
+
 fit_ra = cox_basis(d_survival_sim_cpform_mods, ob_ra)
 fit_ewma = cox_basis(d_survival_sim_cpform_mods, ob_ewma)
 fit_dlnm = cox_basis(d_survival_sim_cpform_mods, cb_dlnm)
+
+fit_acwr = cox_basis(d_survival_sim_cpform_mods, ob_acwr)
+fit_weekly_change = cox_basis(d_survival_sim_cpform_mods, ob_weekly_change)
+fit_dlnm = cox_basis(d_survival_sim_cpform_mods, cb_dlnm_change)
 
 ################################################## Calculate numeric performance measures ############################
   
@@ -377,8 +387,29 @@ aic_ra = AIC(fit_ra)
 aic_ewma = AIC(fit_ewma)
 aic_dlnm = AIC(fit_dlnm)  
 
-tl_predvalues_ra = seq(min(d_survival_sim_cpform_mods$ra_t_load), max(d_survival_sim_cpform_mods$ra_t_load), 25) 
-tl_predvalues_ewma = seq(min(d_survival_sim_cpform_mods$ewma_t_load), max(d_survival_sim_cpform_mods$ewma_t_load), 25)
+
+aic_acwr = AIC(fit_acwr)
+aic_weekly_change = AIC(fit_weekly_change)
+aic_dlnm = AIC(fit_dlnm)  
+
+anova(fit_acwr, fit_weekly_change, fit_dlnm)
+
+tl_predvalues_acwr = seq(min(d_survival_sim_cpform_mods$acwr, na.rm = TRUE), max(d_survival_sim_cpform_mods$acwr, na.rm = TRUE), 0.05) 
+tl_predvalues_weekly_change = seq(min(d_survival_sim_cpform_mods$weekly_change, na.rm = TRUE), 
+                                  max(d_survival_sim_cpform_mods$weekly_change, na.rm = TRUE), 
+                                  100)
+cp_preds_acwr = crosspred(ob_acwr, fit_acwr, at = tl_predvalues_acwr, cumul = TRUE)
+cp_preds_weekly_change = crosspred(ob_weekly_change, fit_weekly_change, at = tl_predvalues_weekly_change, cumul = TRUE)
+cp_preds_dlnm = crosspred(cb_dlnm_change, fit_dlnm, at = tl_predvalues_change, cumul = TRUE)
+
+# p -values?
+# RMSE for model fit?
+sqrt(mean(fit_acwr$residuals^2))
+sqrt(mean(fit_weekly_change$residuals^2))
+sqrt(mean(fit_dlnm$residuals^2))
+
+true_effect = calc_coefs(tl_predvalues_change, lag_seq, flindecay)
+truecumcoefs = rowSums(true_effect)
 
 cp_preds_ra = crosspred(ob_ra, fit_ra, at = tl_predvalues, cen = 600, cumul = TRUE)
 cp_preds_ewma = crosspred(ob_ewma, fit_ewma, at = tl_predvalues, cen = 600, cumul = TRUE)
@@ -499,7 +530,63 @@ persp(x = tl_predvalues, y = lag_seq, cp_preds_dlnm$matRRfit, ticktype="detailed
       ylab="Lag (Days)", zlab="HR", shade=0.75, r=sqrt(3), d=5,
       border=grey(0.2), col = nih_distinct[1], xlab = "sRPE")
 
+#------------------Figures for change in load
 
+
+calc_ci = function(estimate, se, dir = NULL){
+  qn = qnorm(0.95)  
+  if(dir == "high"){
+    ci = estimate + qn*se
+  } else if (dir == "low"){
+    ci = estimate - qn*se
+  }
+}
+cumeff_preds_ci_high_acwr = calc_ci(cp_preds_acwr$allfit, cp_preds_acwr$allse, "high")
+cumeff_preds_ci_low_acwr = calc_ci(cp_preds_acwr$allfit, cp_preds_acwr$allse, "low")
+cumeff_preds_ci_high_weekly_change = calc_ci(cp_preds_weekly_change$allfit, cp_preds_weekly_change$allse, "high")
+cumeff_preds_ci_low_weekly_change = calc_ci(cp_preds_weekly_change$allfit, cp_preds_weekly_change$allse, "low")
+cumeff_preds_ci_high_dlnm = calc_ci(cp_preds_dlnm$allfit, cp_preds_dlnm$allse, "high")
+cumeff_preds_ci_low_dlnm = calc_ci(cp_preds_dlnm$allfit, cp_preds_dlnm$allse, "low")
+
+d_cumulative_preds_acwr = bind_cols(t_load = tl_predvalues_acwr, 
+                                    cumulative_effect = cp_preds_acwr$allfit) %>% 
+                                    mutate(method = "ACWR",
+                                           ci_high = cumeff_preds_ci_high_acwr,
+                                           ci_low = cumeff_preds_ci_low_acwr) 
+
+d_cumulative_preds_weekly_change = bind_cols(t_load = tl_predvalues_weekly_change, 
+                                             cumulative_effect = cp_preds_weekly_change$allfit) %>% 
+                                             mutate(method = "Week-to-week change",
+                                                    ci_high = cumeff_preds_ci_high_weekly_change,
+                                                    ci_low = cumeff_preds_ci_low_weekly_change) 
+
+d_cumulative_preds = bind_cols(t_load = tl_predvalues_change, 
+                               cumulative_effect = cp_preds_dlnm$allfit) %>% 
+                               mutate(method = "DLNM Daily change",
+                                      ci_high = cumeff_preds_ci_high_dlnm,
+                                      ci_low = cumeff_preds_ci_low_dlnm)
+
+d_cumulative_preds = bind_rows(d_cumulative_preds_acwr, d_cumulative_preds_weekly_change, d_cumulative_preds)
+
+
+text_size = 14
+ggplot(d_cumulative_preds, aes(x = t_load)) +
+  facet_wrap(~method, ncol = 3, scales = "free") +
+  geom_ribbon(aes(min = ci_low, max = ci_high), alpha = 0.3, fill = nih_distinct[1]) + 
+  geom_line(aes(y = cumulative_effect, color = "Estimation"), size = 0.5) +
+  scale_y_continuous(limit = c(-15, 25), breaks = scales::breaks_width(5))  +
+  scale_color_manual(values = c(nih_distinct[1], "Black")) + 
+  ylab("Cumulative Hazard") +
+  xlab("sRPE (AU) on Day 0") +
+  theme_line(text_size, legend = TRUE) +
+  theme(panel.border = element_blank(), 
+        panel.background = element_blank(),
+        panel.grid = element_blank(),
+        axis.line = element_line(color = nih_distinct[4]),
+        strip.background = element_blank(),
+        strip.text.x = element_text(size = text_size, family="Trebuchet MS", colour="black", face = "bold", hjust = -0.01),
+        axis.ticks = element_line(color = nih_distinct[4]),
+        legend.position = "bottom")
 
 ######################################################## 3D GRAPHS OF PREDICTED VALUES FOR ASSESSING MODEL FIT
 
