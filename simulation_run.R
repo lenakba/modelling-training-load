@@ -331,18 +331,21 @@ sim_fit_and_res = function(nsub, t_max, tl_values, t_load_type, tl_var, fvar, fl
                      cumul = cp_preds_acwr$allfit, 
                      se = cp_preds_acwr$allse,
                      aic = AIC(fit_acwr),
+                     rmse = rmse(fit_acwr$residuals),
                      method = "acwr")
     
     d_weekly_change = bind_cols(t_load_weekly_change = predvalues_wchange, 
                        cumul = cp_preds_weekly_change$allfit, 
                        se = cp_preds_weekly_change$allse,
                        aic = AIC(fit_weekly_change),
+                       rmse = rmse(fit_weekly_change$residuals),
                        method = "weekly_change")
     
     d_dlnm = bind_cols(t_load_change = predvalues, 
                        cumul = cp_preds_dlnm$allfit, 
                        se = cp_preds_dlnm$allse,
                        aic = AIC(fit_dlnm_change),
+                       rmse = rmse(fit_dlnm_change$residuals),
                        method = "dlnm")
     
     d_res = bind_rows(d_acwr, d_weekly_change, d_dlnm) 
