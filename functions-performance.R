@@ -38,6 +38,12 @@ rmse = function(estimate, target){
   sqrt(mean((estimate - target)^2)) 
 }
 
+# calculate the root-mean-squared-error of predicted vs. real values (for change in load)
+rmse_residuals = function(residuals){
+  sqrt(mean(residuals^2)) 
+}
+
+
 # Monte Carlo Standard Error functions for the different performance measures
 # monte carlo standard error also requires the number of simulations (runs, permutations)
 mcse_bias = function(estimate, target, nsim){
