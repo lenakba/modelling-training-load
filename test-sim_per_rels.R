@@ -27,7 +27,7 @@ tl_observed_change = tl_observed_change[-length(tl_observed_change)]
 tl_valid = min(tl_observed):max(tl_observed)
 # lag set at 4 weeks (28) as is often used in tl studies
 lag_min = 0
-lag_max = 28
+lag_max = 27
 lag_seq = lag_min:lag_max # number of days before current day assumed to affect risk of injury
 
 # vector of tl values used in visualizations of predictions
