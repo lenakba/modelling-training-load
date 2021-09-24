@@ -248,7 +248,7 @@ from_sim_surv_to_q = function(d_survival_sim, d_tl_hist_wide){
 # arrange the exposure history in wide format in a matrix
 # which is neeeded for calculating the q-matrix for the crossbasis
 d_sim_tl_hist_spread_day = 
-  d_sim_tl_hist %>% filter(day >= 28) %>% select(-t_load) %>% 
+  d_sim_tl_hist %>% filter(day >= lag_max) %>% select(-t_load) %>% 
   pivot_wider(names_from = day, values_from = t_load_change) %>% select(-id) %>% as.matrix
 
 d_survival_sim_cpform = counting_process_form(d_survival_sim)
@@ -356,7 +356,7 @@ d_survival_sim_cpform_mods = d_survival_sim_cpform_mods %>%
 d_survival_sim_cpform_mods = d_survival_sim_cpform_mods %>% 
                              left_join(d_sim_hist_weekly, by = c("id", "exit" = "day"))
 
-d_survival_sim_cpform_mods = d_survival_sim_cpform_mods %>% filter(exit >= 28)
+d_survival_sim_cpform_mods = d_survival_sim_cpform_mods %>% filter(exit >= lag_max)
 
 ob_acwr = onebasis(d_survival_sim_cpform_mods$acwr, "lin")
 ob_weekly_change = onebasis(d_survival_sim_cpform_mods$weekly_change, "lin")
