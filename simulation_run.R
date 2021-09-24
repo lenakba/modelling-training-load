@@ -255,18 +255,21 @@ sim_fit_and_res = function(nsub, t_max, tl_values, t_load_type, tl_var, fvar, fl
                    cumul = cp_preds_ra$allfit, 
                    se = cp_preds_ra$allse,
                    aic = AIC(fit_ra),
+                   rmse_residuals = rmse_residuals(fit_ra$residuals),
                    method = "ra")
   
   d_ewma = bind_cols(t_load = predvalues, 
                    cumul = cp_preds_ewma$allfit, 
                    se = cp_preds_ewma$allse,
                    aic = AIC(fit_ewma),
+                   rmse_residuals = rmse_residuals(fit_ewma$residuals),
                    method = "ewma")
   
   d_dlnm = bind_cols(t_load = predvalues, 
                    cumul = cp_preds_dlnm$allfit, 
                    se = cp_preds_dlnm$allse,
                    aic = AIC(fit_dlnm),
+                   rmse_residuals = rmse_residuals(fit_dlnm$residuals),
                    method = "dlnm")
   
   d_res = bind_rows(d_ra, d_ewma, d_dlnm)
