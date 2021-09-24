@@ -25,7 +25,7 @@ tl_valid = min(tl_observed):max(tl_observed)
 # lag set at 4 weeks (28) as is often used in tl studies
 # since the first day is day 0, the 28th day is day 27
 lag_min = 0
-lag_max = 27
+lag_max = 28
 lag_seq = lag_min:lag_max # number of days before current day assumed to affect risk of injury
 
 # vector of tl values used in visualizations of predictions
@@ -198,6 +198,11 @@ function_on_list = function(d_sim_hist, FUN = NULL, day_start){
   l_unnest
 }
 
+# calculate the root-mean-squared-error of predicted vs. real values (for change in load)
+rmse_residuals = function(residuals){
+  sqrt(mean(residuals^2)) 
+}
+
 ######################################################## Helper function which does all of the above
 
 sim_fit_and_res = function(nsub, t_max, tl_values, t_load_type, tl_var, fvar, flag, predvalues, i, folder){
@@ -228,7 +233,7 @@ sim_fit_and_res = function(nsub, t_max, tl_values, t_load_type, tl_var, fvar, fl
   d_survival_sim_cpform_mods = d_survival_sim_cpform_mods %>% left_join(d_sim_hist_ewma, by = c("id", "exit" = "day"))
   
   # remove the first 28 rows for comparability
-  d_survival_sim_cpform_mods = d_survival_sim_cpform_mods %>% filter(exit >= 28)
+  d_survival_sim_cpform_mods = d_survival_sim_cpform_mods %>% filter(exit >= lag_max)
   
   # calculate one- and crossbasis for the model
   ob_ra = onebasis(d_survival_sim_cpform_mods$ra_t_load, "poly", degree = 2)
@@ -270,7 +275,7 @@ sim_fit_and_res = function(nsub, t_max, tl_values, t_load_type, tl_var, fvar, fl
     
     # the first acute load can be calulated from day 22 to day 28
     # to have an equal number acute and chronic values
-    d_sim_tl_hist_acwr_acute = d_tl_hist %>% filter(day >= 22)
+    d_sim_tl_hist_acwr_acute = d_tl_hist %>% filter(day >= lag_max-6)
     d_sim_hist_acute = function_on_list(d_sim_tl_hist_acwr_acute, FUN = slide_sum, lag_max) %>% rename(acute_load = data)
     d_sim_hist_chronic = function_on_list(d_tl_hist, FUN = slide_chronic, lag_max) %>% rename(chronic_load = data)
     
@@ -332,21 +337,21 @@ sim_fit_and_res = function(nsub, t_max, tl_values, t_load_type, tl_var, fvar, fl
                      cumul = cp_preds_acwr$allfit, 
                      se = cp_preds_acwr$allse,
                      aic = AIC(fit_acwr),
-                     rmse = rmse(fit_acwr$residuals),
+                     rmse_residuals = rmse_residuals(fit_acwr$residuals),
                      method = "acwr")
     
     d_weekly_change = bind_cols(t_load_weekly_change = predvalues_wchange, 
                        cumul = cp_preds_weekly_change$allfit, 
                        se = cp_preds_weekly_change$allse,
                        aic = AIC(fit_weekly_change),
-                       rmse = rmse(fit_weekly_change$residuals),
+                       rmse_residuals = rmse_residuals(fit_weekly_change$residuals),
                        method = "weekly_change")
     
     d_dlnm = bind_cols(t_load_change = predvalues, 
                        cumul = cp_preds_dlnm$allfit, 
                        se = cp_preds_dlnm$allse,
                        aic = AIC(fit_dlnm_change),
-                       rmse = rmse(fit_dlnm_change$residuals),
+                       rmse_residuals = rmse_residuals(fit_dlnm_change$residuals),
                        method = "dlnm")
     
     d_res = bind_rows(d_acwr, d_weekly_change, d_dlnm) 
@@ -374,12 +379,12 @@ seqsim = startsim:nsim
 set.seed(1234)
 for(i in seqsim){
   # amount of training load
-  sim_fit_and_res(nsub, t_max, tl_valid, "amount", tl_var = t_load, fvar = fj, flag = wconst,
-                predvalues = tl_predvalues, i = i, folder = folder_j_constant)
-  sim_fit_and_res(nsub, t_max, tl_valid, "amount", tl_var = t_load, fvar = fj, flag = wdecay,
-                  predvalues = tl_predvalues, i = i, folder = folder_j_decay)
-  sim_fit_and_res(nsub, t_max, tl_valid, "amount", tl_var = t_load, fvar = fj, flag = wexponential_decay,
-                  predvalues = tl_predvalues, i = i, folder = folder_j_exponential_decay)
+  # sim_fit_and_res(nsub, t_max, tl_valid, "amount", tl_var = t_load, fvar = fj, flag = wconst,
+  #               predvalues = tl_predvalues, i = i, folder = folder_j_constant)
+  # sim_fit_and_res(nsub, t_max, tl_valid, "amount", tl_var = t_load, fvar = fj, flag = wdecay,
+  #                 predvalues = tl_predvalues, i = i, folder = folder_j_decay)
+  # sim_fit_and_res(nsub, t_max, tl_valid, "amount", tl_var = t_load, fvar = fj, flag = wexponential_decay,
+  #                 predvalues = tl_predvalues, i = i, folder = folder_j_exponential_decay)
   
   # change in training load
   sim_fit_and_res(nsub, t_max, tl_valid, "change", tl_var = t_load_change, fvar = flin, flag = wconst,
