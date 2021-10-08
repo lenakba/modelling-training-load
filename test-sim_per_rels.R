@@ -17,12 +17,18 @@ options(scipen = 40,
 d_load = read_delim("norwegian_premier_league_football_td_vec.csv", delim = ";")
 
 ################################################################################
-nsub = 100 # number of subjects
+nsub = 25 # number of subjects
 t_max = 300 # number of days (length of study)
+
+symmetrized_change = function(x, y){
+  100*((x - y)/(x + y))
+}
 
 # observed values
 tl_observed = (d_load %>% filter(srpe <= 1200))$srpe
-tl_observed_change = lead(tl_observed) - tl_observed
+tl_nozeroes = ifelse(tl_observed == 0, 0.1, tl_observed)
+#tl_observed_change = lead(tl_observed)-tl_observed
+tl_observed_change = symmetrized_change(lead(tl_observed), tl_observed)
 tl_observed_change = tl_observed_change[-length(tl_observed_change)]
 tl_valid = min(tl_observed):max(tl_observed)
 # lag set at 4 weeks (28) as is often used in tl studies
@@ -32,7 +38,7 @@ lag_seq = lag_min:lag_max # number of days before current day assumed to affect 
 
 # vector of tl values used in visualizations of predictions
 tl_predvalues = seq(min(tl_observed), max(tl_observed), 25)
-tl_predvalues_change = seq(min(tl_observed_change), max(tl_observed_change), 25)
+tl_predvalues_change = seq(min(tl_observed_change, na.rm = TRUE), max(tl_observed_change, na.rm = TRUE), 5)
 
 ###################################Training load and lag structure functions###########################################
 # FUNCTIONS TO COMPUTE THE LOGIT AND INVERSE LOGIT TRANSFORMATIONS
@@ -44,7 +50,9 @@ tl_predvalues_change = seq(min(tl_observed_change), max(tl_observed_change), 25)
 # the only exception is for the lag-function wdirection_flip, the linear function will be used instead of J-shape
 fj = function(x)case_when(x < 600 ~ ((600-x)/200)^1.5/10,
                           x >= 600 ~ ((x-600)/200)^3/30)
-flin = function(x) 0.0009*x
+# for absolute change (no longer used)
+#flin = function(x) 0.0009*x
+flin = function(x) 0.009*x
 
 # functions to simulate the lag structure for the
 # long-term time-varying effect of training load
@@ -69,6 +77,12 @@ flindirection_flip = function(x, lag) flin(x) * wdirection_flip(lag)
 fw_funs = list(fjconst, fjdecay, fjexponential_decay, flindirection_flip)
 
 # f*w functions for change in load
+flinconst = function(x, lag) flin(x) * wconst(lag)
+flindecay = function(x, lag) flin(x) * wdecay(lag)
+flinexponential_decay = function(x, lag) flin(x) * wexponential_decay(lag)
+fw_funs_change = list(flinconst, flindecay, flinexponential_decay)
+
+# f*w functions for relative change in load
 flinconst = function(x, lag) flin(x) * wconst(lag)
 flindecay = function(x, lag) flin(x) * wdecay(lag)
 flinexponential_decay = function(x, lag) flin(x) * wexponential_decay(lag)
@@ -103,15 +117,15 @@ persp(x = tl_predvalues, y = lag_seq, l_coefs[[4]], ticktype="detailed", theta=2
 # figures for change in load
 persp(x = tl_predvalues_change, y = lag_seq, l_coefs_change[[1]], ticktype="detailed", theta=230, ltheta=150, phi=40, lphi=30,
       ylab="Lag (Days)", zlab="RR", shade=0.75, r=sqrt(3), d=5, cex.axis=0.7, cex.lab=0.8,
-      border=grey(0.2), col = nih_distinct[1], xlab = "ΔsRPE (AU)")
+      border=grey(0.2), col = nih_distinct[1], xlab = "%ΔsRPE (AU)")
 
 persp(x = tl_predvalues_change, y = lag_seq, l_coefs_change[[2]], ticktype="detailed", theta=230, ltheta=150, phi=40, lphi=30,
       ylab="Lag (Days)", zlab="RR", shade=0.75, r=sqrt(3), d=5, cex.axis=0.7, cex.lab=0.8,
-      border=grey(0.2), col = nih_distinct[1], xlab = "ΔsRPE (AU)")
+      border=grey(0.2), col = nih_distinct[1], xlab = "%ΔsRPE (AU)")
 
 persp(x = tl_predvalues_change, y = lag_seq, l_coefs_change[[3]], ticktype="detailed", theta=230, ltheta=150, phi=40, lphi=30,
       ylab="Lag (Days)", zlab="RR", shade=0.75, r=sqrt(3), d=5, cex.axis=0.7, cex.lab=0.8,
-      border=grey(0.2), col = nih_distinct[1], xlab = "ΔsRPE (AU)")
+      border=grey(0.2), col = nih_distinct[1], xlab = "%ΔsRPE (AU)")
 
 
 dag0 = l_coefs_change[[2]][,1]
@@ -136,7 +150,7 @@ sim_tl_history = function(nsub, t_max, tl_values){
     rename(t_load = value) %>% 
     mutate(id = rep(1:nsub, each = t_max),
            day = rep(1:t_max, nsub),
-           t_load_change = lead(t_load)-t_load)  
+           t_load_change = symmetrized_change(lead(t_load), t_load))  
   d_sim_tl_hist %>% select(id, day, t_load, t_load_change)
 }
 
@@ -340,7 +354,7 @@ d_sim_hist_acwr = d_sim_hist_acute %>%
 d_sim_hist_weekly = function_on_list(d_sim_tl_hist, FUN = slide_sum, 7) %>% 
   rename(week_sum = data) %>% 
   mutate(week_sum_lead = lead(week_sum, 7),
-         weekly_change = week_sum_lead-week_sum)
+         weekly_change = symmetrized_change(week_sum_lead, week_sum))
 
 # the difference can't be measured until a week after the first week
 d_sim_hist_weekly = d_sim_hist_weekly %>% 
@@ -397,7 +411,7 @@ anova(fit_acwr, fit_weekly_change, fit_dlnm)
 tl_predvalues_acwr = seq(min(d_survival_sim_cpform_mods$acwr, na.rm = TRUE), max(d_survival_sim_cpform_mods$acwr, na.rm = TRUE), 0.05) 
 tl_predvalues_weekly_change = seq(min(d_survival_sim_cpform_mods$weekly_change, na.rm = TRUE), 
                                   max(d_survival_sim_cpform_mods$weekly_change, na.rm = TRUE), 
-                                  100)
+                                  5)
 cp_preds_acwr = crosspred(ob_acwr, fit_acwr, at = tl_predvalues_acwr, cumul = TRUE)
 cp_preds_weekly_change = crosspred(ob_weekly_change, fit_weekly_change, at = tl_predvalues_weekly_change, cumul = TRUE)
 cp_preds_dlnm = crosspred(cb_dlnm_change, fit_dlnm, at = tl_predvalues_change, cumul = TRUE)
@@ -577,7 +591,7 @@ ggplot(d_cumulative_preds, aes(x = t_load)) +
   scale_y_continuous(limit = c(-15, 25), breaks = scales::breaks_width(5))  +
   scale_color_manual(values = c(nih_distinct[1], "Black")) + 
   ylab("Cumulative Hazard") +
-  xlab("sRPE (AU) on Day 0") +
+  xlab("Relative change in sRPE (AU) on Day 0") +
   theme_line(text_size, legend = TRUE) +
   theme(panel.border = element_blank(), 
         panel.background = element_blank(),
