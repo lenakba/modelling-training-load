@@ -26,7 +26,6 @@ symmetrized_change = function(x, y){
 
 # observed values
 tl_observed = (d_load %>% filter(srpe <= 1200))$srpe
-tl_nozeroes = ifelse(tl_observed == 0, 0.1, tl_observed)
 #tl_observed_change = lead(tl_observed)-tl_observed
 tl_observed_change = symmetrized_change(lead(tl_observed), tl_observed)
 tl_observed_change = tl_observed_change[-length(tl_observed_change)]
