@@ -7,7 +7,7 @@
 # the only exception is for the lag-function wdirection_flip, the linear function will be used instead of J-shape
 fj = function(x)case_when(x < 600 ~ ((600-x)/200)^1.5/10,
                           x >= 600 ~ ((x-600)/200)^3/30)
-flin = function(x) 0.0009*x
+flin = function(x) 0.009*x
 
 # functions to simulate the lag structure for the
 # long-term time-varying effect of training load
