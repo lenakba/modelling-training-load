@@ -16,10 +16,15 @@ d_load = read_delim("norwegian_premier_league_football_td_vec.csv", delim = ";")
 ################################################################################
 nsub = 100 # number of subjects
 t_max = 300 # number of days (length of study)
+ 
+symmetrized_change = function(x, y){
+  100*((x - y)/(x + y))
+}
 
 # observed values
 tl_observed = (d_load %>% filter(srpe <= 1200))$srpe
-tl_observed_change = lead(tl_observed) - tl_observed
+#tl_observed_change = lead(tl_observed)-tl_observed
+tl_observed_change = symmetrized_change(lead(tl_observed), tl_observed)
 tl_observed_change = tl_observed_change[-length(tl_observed_change)]
 tl_valid = min(tl_observed):max(tl_observed)
 # lag set at 4 weeks (28) as is often used in tl studies
@@ -30,7 +35,7 @@ lag_seq = lag_min:lag_max # number of days before current day assumed to affect 
 
 # vector of tl values used in visualizations of predictions
 tl_predvalues = seq(min(tl_observed), max(tl_observed), 25)
-tl_predvalues_change = seq(min(tl_observed_change), max(tl_observed_change), 25)
+tl_predvalues_change = seq(min(tl_observed_change, na.rm = TRUE), max(tl_observed_change, na.rm = TRUE), 5)
 
 ###################################Training load and lag structure functions###########################################
 source("functions-relationships.R", encoding = "UTF-8")
@@ -49,7 +54,7 @@ sim_tl_history = function(nsub, t_max, tl_values){
     rename(t_load = value) %>% 
     mutate(id = rep(1:nsub, each = t_max),
            day = rep(1:t_max, nsub),
-           t_load_change = lead(t_load)-t_load) 
+           t_load_change = symmetrized_change(lead(t_load), t_load)) 
   d_sim_tl_hist %>% select(id, day, t_load, t_load_change)
 }
 
@@ -293,7 +298,7 @@ sim_fit_and_res = function(nsub, t_max, tl_values, t_load_type, tl_var, fvar, fl
     d_sim_hist_weekly = function_on_list(d_tl_hist, FUN = slide_sum, 7) %>% 
       rename(week_sum = data) %>% 
       mutate(week_sum_lead = lead(week_sum, 7),
-             weekly_change = week_sum_lead-week_sum)
+             weekly_change = symmetrized_change(week_sum_lead, week_sum))
     
     # the difference can't be measured until a week after the first week
     d_sim_hist_weekly = d_sim_hist_weekly %>% 
