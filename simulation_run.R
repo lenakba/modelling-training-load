@@ -30,7 +30,7 @@ tl_valid = min(tl_observed):max(tl_observed)
 # lag set at 4 weeks (28) as is often used in tl studies
 # since the first day is day 0, the 28th day is day 27
 lag_min = 0
-lag_max = 28
+lag_max = 27
 lag_seq = lag_min:lag_max # number of days before current day assumed to affect risk of injury
 
 # vector of tl values used in visualizations of predictions
@@ -165,7 +165,7 @@ ra = function(x, n_days, window = TRUE, ...){
 # using similar syntax as the RA-function
 # wilder=FALSE (the default) uses an exponential smoothing ratio of 2/(n+1)
 # same as in williams et al. 2016
-ewma = function(x, n_days = lag_max){
+ewma = function(x, n_days = lag_max+1){
   TTR::EMA(x, n = n_days, wilder = FALSE)
 }
 
@@ -173,7 +173,7 @@ ewma = function(x, n_days = lag_max){
 # this ensures that RA isn't calculated until the first 4 weeks have passed
 # the ewma function already does this
 slide_ra = function(x){
-  l = slide(x, ~ra(., lag_max), .before = lag_max-1, step = 1, .complete =TRUE) %>% map(last)
+  l = slide(x, ~ra(., lag_max+1), .before = lag_max, step = 1, .complete =TRUE) %>% map(last)
   l = compact(l)
   l = unlist(l)
   l
@@ -189,7 +189,7 @@ slide_sum = function(x){
 }
 
 slide_chronic = function(x){
-  l = slide(x, ~sum(.), .before = lag_max-1, step = 1, .complete =TRUE) %>% map(~./4)
+  l = slide(x, ~sum(.), .before = lag_max, step = 1, .complete =TRUE) %>% map(~./4)
   l = compact(l)
   l = unlist(l)
   l
@@ -234,13 +234,13 @@ sim_fit_and_res = function(nsub, t_max, tl_values, t_load_type, tl_var, fvar, fl
   if(t_load_type == "amount"){
 
   # calc rolling average and ewma on training load amount
-  d_sim_hist_ra = function_on_list(d_tl_hist, slide_ra, lag_max) %>% rename(ra_t_load = data)
-  d_sim_hist_ewma = function_on_list(d_tl_hist, ewma, lag_max) %>% rename(ewma_t_load = data)
+  d_sim_hist_ra = function_on_list(d_tl_hist, slide_ra, lag_max+1) %>% rename(ra_t_load = data)
+  d_sim_hist_ewma = function_on_list(d_tl_hist, ewma, lag_max+1) %>% rename(ewma_t_load = data)
   d_survival_sim_cpform_mods = d_survival_sim_cpform %>% left_join(d_sim_hist_ra, by = c("id", "exit" = "day"))
   d_survival_sim_cpform_mods = d_survival_sim_cpform_mods %>% left_join(d_sim_hist_ewma, by = c("id", "exit" = "day"))
   
   # remove the first 28 rows for comparability
-  d_survival_sim_cpform_mods = d_survival_sim_cpform_mods %>% filter(exit >= lag_max)
+  d_survival_sim_cpform_mods = d_survival_sim_cpform_mods %>% filter(exit >= lag_max+1)
   
   # calculate one- and crossbasis for the model
   ob_ra = onebasis(d_survival_sim_cpform_mods$ra_t_load, "poly", degree = 2)
@@ -285,9 +285,9 @@ sim_fit_and_res = function(nsub, t_max, tl_values, t_load_type, tl_var, fvar, fl
     
     # the first acute load can be calulated from day 22 to day 28
     # to have an equal number acute and chronic values
-    d_sim_tl_hist_acwr_acute = d_tl_hist %>% filter(day >= lag_max-6)
-    d_sim_hist_acute = function_on_list(d_sim_tl_hist_acwr_acute, FUN = slide_sum, lag_max) %>% rename(acute_load = data)
-    d_sim_hist_chronic = function_on_list(d_tl_hist, FUN = slide_chronic, lag_max) %>% rename(chronic_load = data)
+    d_sim_tl_hist_acwr_acute = d_tl_hist %>% filter(day >= lag_max-5)
+    d_sim_hist_acute = function_on_list(d_sim_tl_hist_acwr_acute, FUN = slide_sum, lag_max+1) %>% rename(acute_load = data)
+    d_sim_hist_chronic = function_on_list(d_tl_hist, FUN = slide_chronic, lag_max+1) %>% rename(chronic_load = data)
     
     # calculate the ACWR acute/chronic
     d_sim_hist_acwr = d_sim_hist_acute %>% 
@@ -317,7 +317,7 @@ sim_fit_and_res = function(nsub, t_max, tl_values, t_load_type, tl_var, fvar, fl
       left_join(d_sim_hist_weekly, by = c("id", "exit" = "day"))
     
     # remove the first 28 rows for comparability
-    d_survival_sim_cpform_mods = d_survival_sim_cpform_mods %>% filter(exit >= lag_max)
+    d_survival_sim_cpform_mods = d_survival_sim_cpform_mods %>% filter(exit >= lag_max+1)
     
     # calculate onebasis or crossbasis for the cox model
     ob_acwr = onebasis(d_survival_sim_cpform_mods$acwr, "lin")
