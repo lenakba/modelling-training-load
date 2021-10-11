@@ -55,8 +55,10 @@ sim_tl_history = function(nsub, t_max, tl_values){
     bind_rows() %>% 
     rename(t_load = value) %>% 
     mutate(id = rep(1:nsub, each = t_max),
-           day = rep(1:t_max, nsub),
-           t_load_change = symmetrized_change(lead(t_load), t_load)) 
+           day = rep(1:t_max, nsub)) %>% 
+    group_by(id) %>% 
+    mutate(t_load_change = lag(symmetrized_change(lead(t_load), t_load))) %>% 
+    ungroup()  
   d_sim_tl_hist %>% select(id, day, t_load, t_load_change)
 }
 
@@ -67,12 +69,12 @@ sim_tl_history = function(nsub, t_max, tl_values){
 # fvar        the function for the effect of training load
 # flag        the function for the time-lagged effect of training load
 calc_cumeff = function(tl_hist, fvar, flag){
-  l_effect_seqs = slide(tl_hist, ~pluck(.), .before = lag_max-1, step = 1, .complete = FALSE)
-  l_effect_lags = l_effect_seqs %>% map(~(length(.)-1):0)
+  l_effect_seqs = slide(tl_hist, ~pluck(.), .before = lag_max, step = 1, .complete = FALSE)
+  l_effect_lags = l_effect_seqs %>% map(~(NROW(.)-1):0)
   l_flin = l_effect_seqs %>% map(~fvar(.))
   l_wdecay = l_effect_lags %>% map(~flag(.))
   combfun_effect = l_flin %>% map2(.x = ., .y = l_wdecay, ~ .x * .y)
-  cumeffect = combfun_effect %>% map(., sum)
+  cumeffect = combfun_effect %>% map(., ~sum(., na.rm = TRUE))
   cumeffect_mat = unlist(cumeffect)
   cumeffect_mat
 }
