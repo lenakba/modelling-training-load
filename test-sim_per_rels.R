@@ -17,8 +17,8 @@ options(scipen = 40,
 d_load = read_delim("norwegian_premier_league_football_td_vec.csv", delim = ";")
 
 ################################################################################
-nsub = 25 # number of subjects
-t_max = 300 # number of days (length of study)
+nsub = 150 # number of subjects
+t_max = 600 # number of days (length of study)
 
 symmetrized_change = function(x, y){
   100*((x - y)/(x + y))
@@ -32,12 +32,14 @@ tl_observed_change = tl_observed_change[-length(tl_observed_change)]
 tl_valid = min(tl_observed):max(tl_observed)
 # lag set at 4 weeks (28) as is often used in tl studies
 lag_min = 0
-lag_max = 27
+lag_max = 28
 lag_seq = lag_min:lag_max # number of days before current day assumed to affect risk of injury
 
 # vector of tl values used in visualizations of predictions
-tl_predvalues = seq(min(tl_observed), max(tl_observed), 25)
-tl_predvalues_change = seq(min(tl_observed_change, na.rm = TRUE), max(tl_observed_change, na.rm = TRUE), 5)
+tl_predvalues = seq(min(tl_observed), max(tl_observed), 10)
+tl_predvalues_change = seq(min(tl_observed_change, na.rm = TRUE), max(tl_observed_change, na.rm = TRUE))
+tl_predvalues_acwr = seq(0.1, 3.5)
+tl_predvalues_weekly_change = seq(-80, 80)
 
 ###################################Training load and lag structure functions###########################################
 # FUNCTIONS TO COMPUTE THE LOGIT AND INVERSE LOGIT TRANSFORMATIONS
@@ -215,6 +217,45 @@ sim_survdata = function(nsub, t_max, tl_values, t_load_type, fvar, flag){
 } 
 set.seed(1234)
 d_survival_sim = sim_survdata(nsub, t_max, tl_valid, t_load_type = "change", fvar = flin, flag = wdecay)
+
+# estimate common number of events
+set.seed(1234)
+vec_fjwconst = rep(0, 100)
+for(i in 1:100){
+  d_survival_sim = sim_survdata(nsub, t_max, tl_valid, t_load_type = "amount", fvar = fj, flag = wconst)
+  vec_fjwconst[i] = d_survival_sim %>% summarise(sum(Event)) %>% pull()
+}
+vec_fjwdecay = rep(0, 100)
+for(i in 1:100){
+  d_survival_sim = sim_survdata(nsub, t_max, tl_valid, t_load_type = "amount", fvar = fj, flag = wdecay)
+  vec_fjwdecay[i] = d_survival_sim %>% summarise(sum(Event)) %>% pull()
+}
+vec_fjwexponential_decay = rep(0, 100)
+for(i in 1:100){
+  d_survival_sim = sim_survdata(nsub, t_max, tl_valid, t_load_type = "amount", fvar = fj, flag = wexponential_decay)
+  vec_fjwexponential_decay[i] = d_survival_sim %>% summarise(sum(Event)) %>% pull()
+}
+
+vec_flinwconst = rep(0, 100)
+for(i in 1:100){
+  d_survival_sim = sim_survdata(nsub, t_max, tl_valid, t_load_type = "change", fvar = flin, flag = wconst)
+  vec_flinwconst[i] = d_survival_sim %>% summarise(sum(Event)) %>% pull()
+}
+vec_flinwdecay = rep(0, 100)
+for(i in 1:100){
+  d_survival_sim = sim_survdata(nsub, t_max, tl_valid, t_load_type = "change", fvar = flin, flag = wdecay)
+  vec_flinwdecay[i] = d_survival_sim %>% summarise(sum(Event)) %>% pull()
+}
+vec_flinwexponential_decay = rep(0, 100)
+for(i in 1:100){
+  d_survival_sim = sim_survdata(nsub, t_max, tl_valid, t_load_type = "change", fvar = flin, flag = wexponential_decay)
+  vec_flinwexponential_decay[i] = d_survival_sim %>% summarise(sum(Event)) %>% pull()
+}
+
+overall_mean_injuries = mean(c(vec_fjwconst, vec_fjwdecay, vec_fjwexponential_decay, vec_flinwconst, vec_flinwdecay, vec_flinwexponential_decay))
+d_n_injuries_rels = tibble(vec_fjwconst, vec_fjwdecay, vec_fjwexponential_decay, vec_flinwconst, vec_flinwdecay, vec_flinwexponential_decay) 
+mean_injuries = d_n_injuries_rels %>% summarise_all(mean)
+
 
 ########################################Define the crossbasis for the DLNM method#####################
 
@@ -407,10 +448,6 @@ aic_dlnm = AIC(fit_dlnm)
 
 anova(fit_acwr, fit_weekly_change, fit_dlnm)
 
-tl_predvalues_acwr = seq(min(d_survival_sim_cpform_mods$acwr, na.rm = TRUE), max(d_survival_sim_cpform_mods$acwr, na.rm = TRUE), 0.05) 
-tl_predvalues_weekly_change = seq(min(d_survival_sim_cpform_mods$weekly_change, na.rm = TRUE), 
-                                  max(d_survival_sim_cpform_mods$weekly_change, na.rm = TRUE), 
-                                  5)
 cp_preds_acwr = crosspred(ob_acwr, fit_acwr, at = tl_predvalues_acwr, cumul = TRUE)
 cp_preds_weekly_change = crosspred(ob_weekly_change, fit_weekly_change, at = tl_predvalues_weekly_change, cumul = TRUE)
 cp_preds_dlnm = crosspred(cb_dlnm_change, fit_dlnm, at = tl_predvalues_change, cumul = TRUE)
@@ -569,13 +606,13 @@ d_cumulative_preds_acwr = bind_cols(t_load = tl_predvalues_acwr,
 
 d_cumulative_preds_weekly_change = bind_cols(t_load = tl_predvalues_weekly_change, 
                                              cumulative_effect = cp_preds_weekly_change$allfit) %>% 
-                                             mutate(method = "Week-to-week change",
+                                             mutate(method = "Week-to-week %-change",
                                                     ci_high = cumeff_preds_ci_high_weekly_change,
                                                     ci_low = cumeff_preds_ci_low_weekly_change) 
 
 d_cumulative_preds = bind_cols(t_load = tl_predvalues_change, 
                                cumulative_effect = cp_preds_dlnm$allfit) %>% 
-                               mutate(method = "DLNM Daily change",
+                               mutate(method = "DLNM %-change",
                                       ci_high = cumeff_preds_ci_high_dlnm,
                                       ci_low = cumeff_preds_ci_low_dlnm)
 
@@ -587,7 +624,7 @@ ggplot(d_cumulative_preds, aes(x = t_load)) +
   facet_wrap(~method, ncol = 3, scales = "free") +
   geom_ribbon(aes(min = ci_low, max = ci_high), alpha = 0.3, fill = nih_distinct[1]) + 
   geom_line(aes(y = cumulative_effect, color = "Estimation"), size = 0.5) +
-  scale_y_continuous(limit = c(-15, 25), breaks = scales::breaks_width(5))  +
+  scale_y_continuous(limit = c(-15, 20), breaks = scales::breaks_width(5))  +
   scale_color_manual(values = c(nih_distinct[1], "Black")) + 
   ylab("Cumulative Hazard") +
   xlab("Relative change in sRPE (AU) on Day 0") +

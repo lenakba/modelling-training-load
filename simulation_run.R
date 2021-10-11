@@ -34,8 +34,10 @@ lag_max = 28
 lag_seq = lag_min:lag_max # number of days before current day assumed to affect risk of injury
 
 # vector of tl values used in visualizations of predictions
-tl_predvalues = seq(min(tl_observed), max(tl_observed), 25)
-tl_predvalues_change = seq(min(tl_observed_change, na.rm = TRUE), max(tl_observed_change, na.rm = TRUE), 5)
+tl_predvalues = seq(min(tl_observed), max(tl_observed), 10)
+tl_predvalues_change = seq(min(tl_observed_change, na.rm = TRUE), max(tl_observed_change, na.rm = TRUE))
+tl_predvalues_acwr = seq(0.1, 3.5)
+tl_predvalues_weekly_change = seq(-80, 80)
 
 ###################################Training load and lag structure functions###########################################
 source("functions-relationships.R", encoding = "UTF-8")
@@ -330,14 +332,9 @@ sim_fit_and_res = function(nsub, t_max, tl_values, t_load_type, tl_var, fvar, fl
     fit_dlnm_change = coxph(Surv(enter, exit, event) ~ cb_dlnm_change, d_survival_sim_cpform_mods, y = FALSE, ties = "efron")
     list_fits = list(fit_acwr, fit_weekly_change, fit_dlnm_change)
     
-    # since ACWR and weekly change is on a different scale than absolute difference,
-    # we create a vector of values to predict across for them
-    predvalues_acwr = seq(min(d_sim_hist_acwr$acwr, na.rm = TRUE), max(d_sim_hist_acwr$acwr, na.rm = TRUE), 0.05)
-    predvalues_wchange = seq(min(d_sim_hist_weekly$weekly_change, na.rm = TRUE), max(d_sim_hist_weekly$weekly_change, na.rm = TRUE), 100)
-    
     # predict cumulative effects with the DLNM syntax
-    cp_preds_acwr = crosspred(ob_acwr, fit_acwr, at = predvalues_acwr, cumul = TRUE)
-    cp_preds_weekly_change = crosspred(ob_weekly_change, fit_weekly_change, at = predvalues_wchange, cumul = TRUE)
+    cp_preds_acwr = crosspred(ob_acwr, fit_acwr, at = tl_predvalues_acwr, cumul = TRUE)
+    cp_preds_weekly_change = crosspred(ob_weekly_change, fit_weekly_change, at = tl_predvalues_weekly_change, cumul = TRUE)
     cp_preds_dlnm = crosspred(cb_dlnm_change, fit_dlnm_change, at = predvalues, cen = 600, cumul = TRUE)
     
     # create dataset with predicted values and AIC
