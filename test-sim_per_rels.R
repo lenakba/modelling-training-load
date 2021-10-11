@@ -52,7 +52,7 @@ tl_predvalues_weekly_change = seq(-80, 80)
 fj = function(x)case_when(x < 600 ~ ((600-x)/200)^1.5/10,
                           x >= 600 ~ ((x-600)/200)^3/30)
 # for absolute change (no longer used)
-#flin = function(x) 0.0009*x
+flin_amount = function(x) 0.0009*x
 flin = function(x) 0.009*x
 
 # functions to simulate the lag structure for the
@@ -74,7 +74,7 @@ combsim = cbind(x_funs=rep(c("flin", "fj"), each=2),
 fjconst = function(x, lag) fj(x) * wconst(lag)
 fjdecay = function(x, lag) fj(x) * wdecay(lag)
 fjexponential_decay = function(x, lag) fj(x) * wexponential_decay(lag)
-flindirection_flip = function(x, lag) flin(x) * wdirection_flip(lag)
+flindirection_flip = function(x, lag) flin_amount(x) * wdirection_flip(lag)
 fw_funs = list(fjconst, fjdecay, fjexponential_decay, flindirection_flip)
 
 # f*w functions for change in load

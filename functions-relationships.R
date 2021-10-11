@@ -7,6 +7,7 @@
 # the only exception is for the lag-function wdirection_flip, the linear function will be used instead of J-shape
 fj = function(x)case_when(x < 600 ~ ((600-x)/200)^1.5/10,
                           x >= 600 ~ ((x-600)/200)^3/30)
+flin_amount = function(x) 0.0009*x
 flin = function(x) 0.009*x
 
 # functions to simulate the lag structure for the
@@ -22,7 +23,7 @@ wdirection_flip = function(lag)case_when(lag <= 6 ~ exp(-lag/10)^2,
 fjconst = function(x, lag) fj(x) * wconst(lag)
 fjdecay = function(x, lag) fj(x) * wdecay(lag)
 fjexponential_decay = function(x, lag) fj(x) * wexponential_decay(lag)
-flindirection_flip = function(x, lag) flin(x) * wdirection_flip(lag)
+flindirection_flip = function(x, lag) flin_amount(x) * wdirection_flip(lag)
 
 # f*w functions for change in load
 flinconst = function(x, lag) flin(x) * wconst(lag)
