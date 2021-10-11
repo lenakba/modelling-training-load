@@ -14,7 +14,7 @@ options(scipen = 40,
 d_load = read_delim("norwegian_premier_league_football_td_vec.csv", delim = ";")
 
 ################################################################################
-nsub = 100 # number of subjects
+nsub = 250 # number of subjects
 t_max = 300 # number of days (length of study)
  
 symmetrized_change = function(x, y){
@@ -214,7 +214,7 @@ rmse_residuals = function(residuals){
 
 ######################################################## Helper function which does all of the above
 
-sim_fit_and_res = function(nsub, t_max, tl_values, t_load_type, tl_var, fvar, flag, predvalues, i, folder){
+sim_fit_and_res = function(nsub, t_max, tl_values, t_load_type, tl_var, fvar, flag, predvalues, i, folder, direction_flip = FALSE){
   tl_var = enquo(tl_var)
 
   # simulate exposure history
@@ -245,11 +245,19 @@ sim_fit_and_res = function(nsub, t_max, tl_values, t_load_type, tl_var, fvar, fl
   d_survival_sim_cpform_mods = d_survival_sim_cpform_mods %>% filter(exit >= lag_max+1)
   
   # calculate one- and crossbasis for the model
+  if(direction_flip){
+    ob_ra = onebasis(d_survival_sim_cpform_mods$ra_t_load, "lin")
+    ob_ewma = onebasis(d_survival_sim_cpform_mods$ewma_t_load, "lin")
+    cb_dlnm = crossbasis(q_mat, lag=c(lag_min, lag_max), 
+                         argvar = list(fun="lin"),
+                         arglag = list(fun="ns", knots = 3))   
+  } else {
   ob_ra = onebasis(d_survival_sim_cpform_mods$ra_t_load, "poly", degree = 2)
   ob_ewma = onebasis(d_survival_sim_cpform_mods$ewma_t_load, "poly", degree = 2)
   cb_dlnm = crossbasis(q_mat, lag=c(lag_min, lag_max), 
                        argvar = list(fun="poly", degree = 2),
                        arglag = list(fun="ns", knots = 3))
+  }
 
   fit_ra = coxph(Surv(enter, exit, event) ~ ob_ra, d_survival_sim_cpform_mods, y = FALSE, ties = "efron")
   fit_ewma = coxph(Surv(enter, exit, event) ~ ob_ewma, d_survival_sim_cpform_mods, y = FALSE, ties = "efron")
@@ -381,17 +389,19 @@ folder_lin_exponential_decay = paste0(base_folder, "change_lin_exponential_decay
 
 
 startsim = 1
-nsim = 4
+nsim = 100
 seqsim = startsim:nsim
 set.seed(1234)
 for(i in seqsim){
   # amount of training load
-  # sim_fit_and_res(nsub, t_max, tl_valid, "amount", tl_var = t_load, fvar = fj, flag = wconst,
-  #               predvalues = tl_predvalues, i = i, folder = folder_j_constant)
-  # sim_fit_and_res(nsub, t_max, tl_valid, "amount", tl_var = t_load, fvar = fj, flag = wdecay,
-  #                 predvalues = tl_predvalues, i = i, folder = folder_j_decay)
-  # sim_fit_and_res(nsub, t_max, tl_valid, "amount", tl_var = t_load, fvar = fj, flag = wexponential_decay,
-  #                 predvalues = tl_predvalues, i = i, folder = folder_j_exponential_decay)
+  sim_fit_and_res(nsub, t_max, tl_valid, "amount", tl_var = t_load, fvar = fj, flag = wconst,
+                  predvalues = tl_predvalues, i = i, folder = folder_j_constant)
+  sim_fit_and_res(nsub, t_max, tl_valid, "amount", tl_var = t_load, fvar = fj, flag = wdecay,
+                  predvalues = tl_predvalues, i = i, folder = folder_j_decay)
+  sim_fit_and_res(nsub, t_max, tl_valid, "amount", tl_var = t_load, fvar = fj, flag = wexponential_decay,
+                  predvalues = tl_predvalues, i = i, folder = folder_j_exponential_decay)
+  sim_fit_and_res(nsub, t_max, tl_valid, "amount", tl_var = t_load, fvar = flin_amount, flag = wdirection_flip,
+                  predvalues = tl_predvalues, i = i, folder = folder_lin_direction_flip, direction_flip = TRUE)
   
   # change in training load
   sim_fit_and_res(nsub, t_max, tl_valid, "change", tl_var = t_load_change, fvar = flin, flag = wconst,

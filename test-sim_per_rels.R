@@ -17,8 +17,10 @@ options(scipen = 40,
 d_load = read_delim("norwegian_premier_league_football_td_vec.csv", delim = ";")
 
 ################################################################################
-nsub = 25 # number of subjects
-t_max = 100 # number of days (length of study)
+
+# 200 pers, 1 sesong er ca. 150 skader 
+nsub = 75 # number of subjects
+t_max = 300 # number of days (length of study)
 
 symmetrized_change = function(x, y){
   100*((x - y)/(x + y))
