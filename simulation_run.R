@@ -348,14 +348,14 @@ sim_fit_and_res = function(nsub, t_max, tl_values, t_load_type, tl_var, fvar, fl
     cp_preds_dlnm = crosspred(cb_dlnm_change, fit_dlnm_change, at = predvalues, cen = 600, cumul = TRUE)
     
     # create dataset with predicted values and AIC
-    d_acwr = bind_cols(t_load_acwr = predvalues_acwr, 
+    d_acwr = bind_cols(t_load_acwr = tl_predvalues_acwr, 
                      cumul = cp_preds_acwr$allfit, 
                      se = cp_preds_acwr$allse,
                      aic = AIC(fit_acwr),
                      rmse_residuals = rmse_residuals(fit_acwr$residuals),
                      method = "acwr")
     
-    d_weekly_change = bind_cols(t_load_weekly_change = predvalues_wchange, 
+    d_weekly_change = bind_cols(t_load_weekly_change = tl_predvalues_weekly_change, 
                        cumul = cp_preds_weekly_change$allfit, 
                        se = cp_preds_weekly_change$allse,
                        aic = AIC(fit_weekly_change),
