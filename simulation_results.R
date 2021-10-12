@@ -67,8 +67,21 @@ for(i in 1:n_sim){
 }
 d_res_j_exponential_decay = d_res_j_exponential_decay %>% mutate(relationship = "Exponential Decay")
 
+#------------amount, lin direction_flip
+files_fits = list.files(path = folder_lin_direction_flip)
+n_sim = length(files_fits)/length(file_types) # divide by the number of file types
+l_fits_lin_direction_flip = list()
+d_res_lin_direction_flip = data.frame()
+for(i in 1:n_sim){
+  temp_data_fits = readRDS(paste0(folder_lin_direction_flip, "fits_",i,"_.rds"))
+  temp_data_res = readRDS(paste0(folder_lin_direction_flip, "res_",i,"_.rds"))
+  l_fits_lin_direction_flip = append(l_fits_lin_direction_flip, temp_data_fits)
+  d_res_lin_direction_flip = rbind(d_res_lin_direction_flip, temp_data_res)
+}
+d_res_lin_direction_flip = d_res_lin_direction_flip %>% mutate(relationship = "Linear Direction Change")
+
 # make list of datasets for amount results
-l_res_amount = list(d_res_j_constant, d_res_j_decay, d_res_j_exponential_decay)
+l_res_amount = list(d_res_j_constant, d_res_j_decay, d_res_j_exponential_decay, d_res_lin_direction_flip)
 
 ################################### Change
 
@@ -124,13 +137,13 @@ source("functions-performance.R", encoding = "UTF-8")
 source("functions-relationships.R", encoding = "UTF-8")
 
 # list of relationship functions
-fw_funs = list(fjconst, fjdecay, fjexponential_decay)
+fw_funs = list(fjconst, fjdecay, fjexponential_decay, flindirection_flip)
 fw_funs_change = list(flinconst, flindecay, flinexponential_decay)
 
 ###################################Calculate performance############################################
 # lag set at 4 weeks (28) as is often used in tl studies
 lag_min = 0
-lag_max = 28
+lag_max = 27
 lag_seq = lag_min:lag_max # number of days before current day assumed to affect risk of injury
 tl_predvalues = d_res_j_constant %>% filter(rep == 1, method == "ra") %>% pull(t_load)
 tl_predvalues_change = d_res_lin_constant %>% filter(rep == 1, method == "dlnm") %>% pull(t_load_change)
@@ -176,7 +189,7 @@ sample_size_needed = d_res_amount  %>%
   pull(n_sim_needed)
 
 perf_cols = c("aic", "rmse", "rmse_residuals", "coverage", "aw")
-d_perf_params_amount = d_res_amount %>% group_by(relationship, method) %>% summarise_at(vars(perf_cols, starts_with("mcse")), mean)
+d_perf_params_amount = d_res_amount %>% group_by(relationship, method) %>% summarise_at(vars(all_of(perf_cols), starts_with("mcse")), mean)
 
 #---------------Change
 d_res_change = l_res_change %>% bind_rows()
