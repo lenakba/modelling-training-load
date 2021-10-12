@@ -225,13 +225,13 @@ sim_fit_and_res = function(nsub, t_max, tl_values, t_load_type, tl_var, fvar, fl
   # arrange the exposure history in wide format in a matrix
   # which is neeeded for calculating the q-matrix for the crossbasis
   d_sim_tl_hist_spread_day = 
-    d_tl_hist %>% select(id, day, !!tl_var) %>% filter(day >= lag_max) %>% 
+    d_tl_hist %>% select(id, day, !!tl_var) %>% filter(day >= lag_max+1) %>% 
     pivot_wider(names_from = day, values_from = !!tl_var) %>% select(-id) %>% as.matrix
   
   # the DLNM data has to be cut the lag_max (28) days 
   # to be comparable with other methods (run on the same sample size)
   d_survival_sim_cpform = counting_process_form(d_survival_sim)
-  q_mat = calc_q_matrix(d_survival_sim_cpform %>% filter(exit >= lag_max), d_sim_tl_hist_spread_day)
+  q_mat = calc_q_matrix(d_survival_sim_cpform %>% filter(exit >= lag_max+1), d_sim_tl_hist_spread_day)
 
   if(t_load_type == "amount"){
 
@@ -241,7 +241,7 @@ sim_fit_and_res = function(nsub, t_max, tl_values, t_load_type, tl_var, fvar, fl
   d_survival_sim_cpform_mods = d_survival_sim_cpform %>% left_join(d_sim_hist_ra, by = c("id", "exit" = "day"))
   d_survival_sim_cpform_mods = d_survival_sim_cpform_mods %>% left_join(d_sim_hist_ewma, by = c("id", "exit" = "day"))
   
-  # remove the first 28 rows for comparability
+  # remove the first 28 rows for comparability of the AIC, which requires the same sample size for all models
   d_survival_sim_cpform_mods = d_survival_sim_cpform_mods %>% filter(exit >= lag_max+1)
   
   # calculate one- and crossbasis for the model

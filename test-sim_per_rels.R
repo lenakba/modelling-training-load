@@ -194,7 +194,7 @@ calc_cumeffs_all = function(d_sim_hist, t_load_type = "amount", fvar, flag){
   d_cumeffs
 }
 
-d_cumeff = calc_cumeffs_all(d_sim_tl_hist, t_load_type = "change", flin, wdecay)
+d_cumeff = calc_cumeffs_all(d_sim_tl_hist, t_load_type = "amount", fj, wdecay)
 
 ########################################Simulate injuries based on cumulative effect of training load#####################
 d_cumeff_mat = d_cumeff %>% mutate(day = rep(1:t_max, nsub)) %>% 
@@ -220,7 +220,7 @@ sim_survdata = function(nsub, t_max, tl_values, t_load_type, fvar, flag){
   d_survival_sim
 } 
 set.seed(1234)
-d_survival_sim = sim_survdata(nsub, t_max, tl_valid, t_load_type = "change", fvar = flin, flag = wdecay)
+d_survival_sim = sim_survdata(nsub, t_max, tl_valid, t_load_type = "amount", fvar = flin, flag = wdecay)
 
 # estimate common number of events
 set.seed(1234)
@@ -306,12 +306,11 @@ from_sim_surv_to_q = function(d_survival_sim, d_tl_hist_wide){
 # arrange the exposure history in wide format in a matrix
 # which is neeeded for calculating the q-matrix for the crossbasis
 d_sim_tl_hist_spread_day = 
-  d_sim_tl_hist %>% filter(day >= lag_max) %>% select(-t_load) %>% 
+  d_sim_tl_hist %>% filter(day >= lag_max+1) %>% select(-t_load) %>% 
   pivot_wider(names_from = day, values_from = t_load_change) %>% select(-id) %>% as.matrix
 
 d_survival_sim_cpform = counting_process_form(d_survival_sim)
-q_mat = calc_q_matrix(d_survival_sim_cpform %>% filter(exit >= lag_max), d_sim_tl_hist_spread_day)
-
+q_mat = calc_q_matrix(d_survival_sim_cpform %>% filter(exit >= lag_max+1), d_sim_tl_hist_spread_day)
 
 ####################################### Modify training load with different methods ####################################
 
@@ -357,6 +356,7 @@ d_sim_hist_ewma = function_on_list(d_sim_tl_hist, ewma, lag_max+1) %>% rename(ew
 # calc rolling average and ewma on training load amount
 d_survival_sim_cpform_mods = d_survival_sim_cpform %>% left_join(d_sim_hist_ra, by = c("id", "exit" = "day"))
 d_survival_sim_cpform_mods = d_survival_sim_cpform_mods %>% left_join(d_sim_hist_ewma, by = c("id", "exit" = "day"))
+d_survival_sim_cpform_mods = d_survival_sim_cpform_mods %>% filter(exit >= lag_max+1)
 ob_ra = onebasis(d_survival_sim_cpform_mods$ra_t_load, "poly", degree = 2)
 ob_ewma = onebasis(d_survival_sim_cpform_mods$ewma_t_load, "poly", degree = 2)
 cb_dlnm = crossbasis(q_mat, lag=c(lag_min, lag_max), 
@@ -430,6 +430,11 @@ cox_basis = function(d_sim_surv, basis){
 }
 
 
+ob_ra = onebasis(d_survival_sim_cpform_mods$ra_t_load, "poly", degree = 2)
+ob_ewma = onebasis(d_survival_sim_cpform_mods$ewma_t_load, "poly", degree = 2)
+cb_dlnm = crossbasis(q_mat, lag=c(lag_min, lag_max), 
+                     argvar = list(fun="poly", degree = 2),
+                     arglag = list(fun="ns", knots = 3))
 
 fit_ra = cox_basis(d_survival_sim_cpform_mods, ob_ra)
 fit_ewma = cox_basis(d_survival_sim_cpform_mods, ob_ewma)
