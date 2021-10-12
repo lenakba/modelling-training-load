@@ -144,14 +144,6 @@ calc_q_matrix = function(d_counting_process, d_tl_hist_wide){
   
 }
 
-# helper function to use both functions above in 1 step
-# resulting in a q-matrix
-from_sim_surv_to_q = function(d_survival_sim, d_tl_hist_wide){
-  d_counting_process = counting_process_form(d_survival_sim)
-  q = calc_q_matrix(d_counting_process, d_tl_hist_wide)
-  q
-}
-
 ####################################### Modify training load with different methods ####################################
 
 # Perform the typical methods for handling training load amount: rolling average and EWMA
@@ -225,36 +217,38 @@ sim_fit_and_res = function(nsub, t_max, tl_values, t_load_type, tl_var, fvar, fl
   # arrange the exposure history in wide format in a matrix
   # which is neeeded for calculating the q-matrix for the crossbasis
   d_sim_tl_hist_spread_day = 
-    d_tl_hist %>% select(id, day, !!tl_var) %>% filter(day >= lag_max+1) %>% 
+    d_tl_hist %>% select(id, day, !!tl_var) %>% 
     pivot_wider(names_from = day, values_from = !!tl_var) %>% select(-id) %>% as.matrix
   
   # the DLNM data has to be cut the lag_max (28) days 
   # to be comparable with other methods (run on the same sample size)
   d_survival_sim_cpform = counting_process_form(d_survival_sim)
-  q_mat = calc_q_matrix(d_survival_sim_cpform %>% filter(exit >= lag_max+1), d_sim_tl_hist_spread_day)
+  q_mat = calc_q_matrix(d_survival_sim_cpform, d_sim_tl_hist_spread_day)
+  q_mat_same_n = q_mat %>% as_tibble() %>% mutate(day = as.numeric(rownames(q_mat))) %>% 
+    filter(day >= lag_max+1) %>% select(-day) %>% as.matrix
 
   if(t_load_type == "amount"){
 
   # calc rolling average and ewma on training load amount
   d_sim_hist_ra = function_on_list(d_tl_hist, slide_ra, lag_max+1) %>% rename(ra_t_load = data)
   d_sim_hist_ewma = function_on_list(d_tl_hist, ewma, lag_max+1) %>% rename(ewma_t_load = data)
-  d_survival_sim_cpform_mods = d_survival_sim_cpform %>% left_join(d_sim_hist_ra, by = c("id", "exit" = "day"))
-  d_survival_sim_cpform_mods = d_survival_sim_cpform_mods %>% left_join(d_sim_hist_ewma, by = c("id", "exit" = "day"))
   
   # remove the first 28 rows for comparability of the AIC, which requires the same sample size for all models
-  d_survival_sim_cpform_mods = d_survival_sim_cpform_mods %>% filter(exit >= lag_max+1)
+  d_survival_sim_cpform_mods = d_survival_sim_cpform %>% filter(exit >= lag_max+1)
+  d_survival_sim_cpform_mods = d_survival_sim_cpform_mods %>% left_join(d_sim_hist_ra, by = c("id", "exit" = "day"))
+  d_survival_sim_cpform_mods = d_survival_sim_cpform_mods %>% left_join(d_sim_hist_ewma, by = c("id", "exit" = "day"))
   
   # calculate one- and crossbasis for the model
   if(direction_flip){
     ob_ra = onebasis(d_survival_sim_cpform_mods$ra_t_load, "lin")
     ob_ewma = onebasis(d_survival_sim_cpform_mods$ewma_t_load, "lin")
-    cb_dlnm = crossbasis(q_mat, lag=c(lag_min, lag_max), 
+    cb_dlnm = crossbasis(q_mat_same_n, lag=c(lag_min, lag_max), 
                          argvar = list(fun="lin"),
                          arglag = list(fun="ns", knots = 3))   
   } else {
   ob_ra = onebasis(d_survival_sim_cpform_mods$ra_t_load, "poly", degree = 2)
   ob_ewma = onebasis(d_survival_sim_cpform_mods$ewma_t_load, "poly", degree = 2)
-  cb_dlnm = crossbasis(q_mat, lag=c(lag_min, lag_max), 
+  cb_dlnm = crossbasis(q_mat_same_n, lag=c(lag_min, lag_max), 
                        argvar = list(fun="poly", degree = 2),
                        arglag = list(fun="ns", knots = 3))
   }
@@ -319,20 +313,20 @@ sim_fit_and_res = function(nsub, t_max, tl_values, t_load_type, tl_var, fvar, fl
       mutate(day = lead(day, 7)) %>% 
       filter(!is.na(day)) %>% ungroup()
     
+    # remove the first 28 rows for comparability
+    d_survival_sim_cpform_mods = d_survival_sim_cpform %>% filter(exit >= lag_max+1)
+    
     # couple survival data with change in load data
-    d_survival_sim_cpform_mods = d_survival_sim_cpform %>% 
+    d_survival_sim_cpform_mods = d_survival_sim_cpform_mods %>% 
       left_join(d_sim_hist_acwr, by = c("id", "exit" = "day"))
     
     d_survival_sim_cpform_mods = d_survival_sim_cpform_mods %>% 
       left_join(d_sim_hist_weekly, by = c("id", "exit" = "day"))
     
-    # remove the first 28 rows for comparability
-    d_survival_sim_cpform_mods = d_survival_sim_cpform_mods %>% filter(exit >= lag_max+1)
-    
     # calculate onebasis or crossbasis for the cox model
     ob_acwr = onebasis(d_survival_sim_cpform_mods$acwr, "lin")
     ob_weekly_change = onebasis(d_survival_sim_cpform_mods$weekly_change, "lin")
-    cb_dlnm_change = crossbasis(q_mat, lag=c(lag_min, lag_max), 
+    cb_dlnm_change = crossbasis(q_mat_same_n, lag=c(lag_min, lag_max), 
                                 argvar = list(fun="lin"),
                                 arglag = list(fun="ns", knots = 3))
     

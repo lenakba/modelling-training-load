@@ -19,7 +19,7 @@ d_load = read_delim("norwegian_premier_league_football_td_vec.csv", delim = ";")
 ################################################################################
 
 # 200 pers, 1 sesong er ca. 150 skader 
-nsub = 75 # number of subjects
+nsub = 250 # number of subjects
 t_max = 300 # number of days (length of study)
 
 symmetrized_change = function(x, y){
@@ -220,7 +220,7 @@ sim_survdata = function(nsub, t_max, tl_values, t_load_type, fvar, flag){
   d_survival_sim
 } 
 set.seed(1234)
-d_survival_sim = sim_survdata(nsub, t_max, tl_valid, t_load_type = "amount", fvar = flin, flag = wdecay)
+d_survival_sim = sim_survdata(nsub, t_max, tl_valid, t_load_type = "amount", fvar = fj, flag = wdecay)
 
 # estimate common number of events
 set.seed(1234)
@@ -292,25 +292,17 @@ calc_q_matrix = function(d_counting_process, d_tl_hist_wide){
            ~exphist(d_tl_hist_wide[.x,], .y, c(lag_min, lag_max))) %>% 
     do.call("rbind", .)
   q
-  
-}
-
-# helper function to use both functions above in 1 step
-# resulting in a q-matrix
-from_sim_surv_to_q = function(d_survival_sim, d_tl_hist_wide){
-  d_counting_process = counting_process_form(d_survival_sim)
-  q = calc_q_matrix(d_counting_process, d_tl_hist_wide)
-  q
 }
 
 # arrange the exposure history in wide format in a matrix
 # which is neeeded for calculating the q-matrix for the crossbasis
 d_sim_tl_hist_spread_day = 
-  d_sim_tl_hist %>% filter(day >= lag_max+1) %>% select(-t_load) %>% 
-  pivot_wider(names_from = day, values_from = t_load_change) %>% select(-id) %>% as.matrix
-
+  d_sim_tl_hist %>% select(-t_load_change) %>% 
+  pivot_wider(names_from = day, values_from = t_load) %>% select(-id) %>% as.matrix
 d_survival_sim_cpform = counting_process_form(d_survival_sim)
-q_mat = calc_q_matrix(d_survival_sim_cpform %>% filter(exit >= lag_max+1), d_sim_tl_hist_spread_day)
+q_mat = calc_q_matrix(d_survival_sim_cpform, d_sim_tl_hist_spread_day)
+q_mat_same_n = q_mat %>% as_tibble() %>% mutate(day = as.numeric(rownames(q_mat))) %>% 
+               filter(day >= lag_max+1) %>% select(-day) %>% as.matrix
 
 ####################################### Modify training load with different methods ####################################
 
@@ -354,12 +346,12 @@ d_sim_hist_ra = function_on_list(d_sim_tl_hist, slide_ra, lag_max+1) %>% rename(
 d_sim_hist_ewma = function_on_list(d_sim_tl_hist, ewma, lag_max+1) %>% rename(ewma_t_load = data)
 
 # calc rolling average and ewma on training load amount
-d_survival_sim_cpform_mods = d_survival_sim_cpform %>% left_join(d_sim_hist_ra, by = c("id", "exit" = "day"))
+d_survival_sim_cpform_mods = d_survival_sim_cpform %>% filter(exit >= lag_max+1)
+d_survival_sim_cpform_mods = d_survival_sim_cpform_mods %>% left_join(d_sim_hist_ra, by = c("id", "exit" = "day"))
 d_survival_sim_cpform_mods = d_survival_sim_cpform_mods %>% left_join(d_sim_hist_ewma, by = c("id", "exit" = "day"))
-d_survival_sim_cpform_mods = d_survival_sim_cpform_mods %>% filter(exit >= lag_max+1)
 ob_ra = onebasis(d_survival_sim_cpform_mods$ra_t_load, "poly", degree = 2)
 ob_ewma = onebasis(d_survival_sim_cpform_mods$ewma_t_load, "poly", degree = 2)
-cb_dlnm = crossbasis(q_mat, lag=c(lag_min, lag_max), 
+cb_dlnm = crossbasis(q_mat_same_n, lag=c(lag_min, lag_max), 
                      argvar = list(fun="poly", degree = 2),
                      arglag = list(fun="ns", knots = 3))
 
@@ -429,13 +421,6 @@ cox_basis = function(d_sim_surv, basis){
   eval_bare(expr(coxph(Surv(enter, exit, event) ~ !!basis, d_sim_surv, y = FALSE, ties = "efron")))
 }
 
-
-ob_ra = onebasis(d_survival_sim_cpform_mods$ra_t_load, "poly", degree = 2)
-ob_ewma = onebasis(d_survival_sim_cpform_mods$ewma_t_load, "poly", degree = 2)
-cb_dlnm = crossbasis(q_mat, lag=c(lag_min, lag_max), 
-                     argvar = list(fun="poly", degree = 2),
-                     arglag = list(fun="ns", knots = 3))
-
 fit_ra = cox_basis(d_survival_sim_cpform_mods, ob_ra)
 fit_ewma = cox_basis(d_survival_sim_cpform_mods, ob_ewma)
 fit_dlnm = cox_basis(d_survival_sim_cpform_mods, cb_dlnm)
@@ -450,6 +435,7 @@ aic_ra = AIC(fit_ra)
 aic_ewma = AIC(fit_ewma)
 aic_dlnm = AIC(fit_dlnm)  
 
+anova(fit_ra, fit_ewma, fit_dlnm)
 
 aic_acwr = AIC(fit_acwr)
 aic_weekly_change = AIC(fit_weekly_change)
@@ -467,6 +453,8 @@ sqrt(mean(fit_acwr$residuals^2))
 sqrt(mean(fit_weekly_change$residuals^2))
 sqrt(mean(fit_dlnm$residuals^2))
 
+
+## compare true coefs vs. predicted coefs
 true_effect = calc_coefs(tl_predvalues_change, lag_seq, flindecay)
 truecumcoefs = rowSums(true_effect)
 
