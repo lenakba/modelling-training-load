@@ -23,9 +23,11 @@ folder_lin_exponential_decay = paste0(base_folder, "change_lin_exponential_decay
 # vector of file types
 file_types = c("fits", "res")
 
-# output from the for-loops and functions below are saved as "simulation_results_perfparams.csv"
+# output from the for-loops and functions below are saved as 
+# "simulation_results_amount.csv" and "simulation_results_change.csv"
 # read the csv file to save time, or run all the for-loops and functions again
-# perf_estimates_all = read_delim("simulation_results_perfparams.csv", delim = ";")
+d_res_amount = read_delim("simulation_results_amount.csv", delim = ";")
+d_res_change = read_delim("simulation_results_change.csv", delim = ";")
 
 ################################### Amount
 #------------amount, j constant
@@ -196,7 +198,6 @@ d_res_change = d_res_change %>%
 
 d_perf_params_change = d_res_change %>% group_by(relationship, method) %>% summarise_at(vars(all_of(perf_internal)), mean)
 
-
 #--------------- find the sample size after 500 sims
 sample_size_needed = d_res_amount  %>% 
   group_by(relationship, method) %>% 
@@ -204,3 +205,9 @@ sample_size_needed = d_res_amount  %>%
   ungroup() %>% summarise(n_sim_needed = max(n_sim)) %>% 
   pull(n_sim_needed)
 
+############################################ Saving the results as datasets #################################################
+
+# write_delim is preferable, but write_excel_csv is required for excel to understand
+# that the file encoding is UTF-8
+# write_excel_csv(d_res_amount, "simulation_results_amount.csv", delim = ";", na = "")
+# write_excel_csv(d_res_change, "simulation_results_change.csv", delim = ";", na = "")
