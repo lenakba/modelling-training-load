@@ -181,15 +181,9 @@ d_res_amount = d_res_amount %>% group_by(relationship, method, rep) %>%
                          mcse_coverage = mcse_coverage(ci_low, ci_high, true_cumul_coefs, n(), nsims)) %>% 
                   ungroup()
 
-# find the sample size after 500 sims
-sample_size_needed = d_res_amount  %>% 
-  group_by(relationship, method) %>% 
-  summarise(variance_est = var(bias, na.rm = TRUE), n_sim = (variance_est^2)/0.25) %>% 
-  ungroup() %>% summarise(n_sim_needed = max(n_sim)) %>% 
-  pull(n_sim_needed)
-
-perf_cols = c("aic", "rmse", "rmse_residuals", "coverage", "aw")
-d_perf_params_amount = d_res_amount %>% group_by(relationship, method) %>% summarise_at(vars(all_of(perf_cols), starts_with("mcse")), mean)
+perf_internal = c("aic", "rmse_residuals", "aw")
+perf_external = c("rmse", "coverage")
+d_perf_params_amount = d_res_amount %>% group_by(relationship, method) %>% summarise_at(vars(all_of(perf_internal), all_of(perf_external), starts_with("mcse")), mean)
 
 #---------------Change
 d_res_change = l_res_change %>% bind_rows()
@@ -200,6 +194,13 @@ d_res_change = d_res_change %>%
          aw = average_width(ci_high, ci_low)) %>% 
   ungroup()
 
-perf_cols = c("aic", "rmse_residuals", "aw")
-d_perf_params_change = d_res_change %>% group_by(relationship, method) %>% summarise_at(vars(perf_cols), mean)
+d_perf_params_change = d_res_change %>% group_by(relationship, method) %>% summarise_at(vars(all_of(perf_internal)), mean)
+
+
+#--------------- find the sample size after 500 sims
+sample_size_needed = d_res_amount  %>% 
+  group_by(relationship, method) %>% 
+  summarise(variance_est = var(bias, na.rm = TRUE), n_sim = (variance_est^2)/0.25) %>% 
+  ungroup() %>% summarise(n_sim_needed = max(n_sim)) %>% 
+  pull(n_sim_needed)
 
