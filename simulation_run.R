@@ -361,7 +361,7 @@ sim_fit_and_res = function(nsub, t_max, tl_values, t_load_type, tl_var, fvar, fl
                        se = cp_preds_dlnm$allse,
                        aic = AIC(fit_dlnm_change),
                        rmse_residuals = rmse_residuals(fit_dlnm_change$residuals),
-                       method = "dlnm")
+                       method = "dlnm %Δ")
     
     d_res = bind_rows(d_acwr, d_weekly_change, d_dlnm) 
   }
