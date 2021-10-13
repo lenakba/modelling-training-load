@@ -51,17 +51,20 @@ preds_plot = function(d, x, xlab, compare = TRUE){
     ylab("Cumulative Hazard") +
     xlab(xlab) +
     theme_line(text_size, legend = TRUE) +
-    ostrc_theme
+    ostrc_theme 
   plot
 }
 
-
 preds_plot(d_amount_3rels, t_load, "sRPE (AU) on Day 0")  +
   facet_wrap(c("relationship", "method_fac"), ncol = 3, scales = "free") +
-  scale_y_continuous(limit = c(-15, 20), breaks = scales::breaks_width(5))  
+  scale_y_continuous(limit = c(-15, 20), breaks = scales::breaks_width(5)) 
 
 preds_plot(d_directionflip, t_load, "sRPE (AU) on Day 0") + 
   facet_wrap(~method_fac, ncol = 3, scales = "free") 
+
+# for labels?
+# rel_labs <- c("A Constant", "B Constant", "C Constant", "D Decay", "E Decay", "F Decay", "G Exponential Decay", "H Exponential Decay", "I Exponential Decay")
+# names(rel_labs) <- rep(c("Constant", "Decay", "Exponential Decay"), each = 3)
 
 ############################################### Predicted values (change only) ###############################################
 d_change_1rep = d_res_change %>% filter(rep == 1)
@@ -109,10 +112,19 @@ rmse_plot(d_perf_params_change, aic, xlab = "AIC") + facet_wrap(~relationship, s
 
 ############################################## DLNM effect at each lag level #################################################################
 
+# lag set at 4 weeks (28) as is often used in tl studies
+lag_min = 0
+lag_max = 27
+lag_seq = lag_min:lag_max # number of days before current day assumed to affect risk of injury
+tl_predvalues = d_res_amount %>% filter(rep == 1, method == "EWMA", relationship == "Constant") %>% pull(t_load)
+tl_predvalues_change = d_res_lin_constant %>% filter(rep == 1, method == "dlnm") %>% pull(t_load_change)
+
 # time x amount effect (DLNM only)
 
+const_coefs = d_res_amount %>% filter(relationship == "Constant") %>% pull(true_cumul_coefs)
+
 # j decay
-persp(x = tl_predvalues, y = lag_seq, exp(true_effect), ticktype="detailed", theta=230, ltheta=150, phi=40, lphi=30,
+persp(x = tl_predvalues, y = lag_seq, exp(const_coefs), ticktype="detailed", theta=230, ltheta=150, phi=40, lphi=30,
       ylab="Lag (Days)", zlab="HR", shade=0.75, r=sqrt(3), d=5,
       border=grey(0.2), col = nih_distinct[1], xlab = "sRPE")
 
