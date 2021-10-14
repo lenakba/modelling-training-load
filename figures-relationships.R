@@ -49,33 +49,37 @@ l_coefs = fw_funs %>% map(., ~calc_coefs(tl_predvalues, lag_seq, .)) %>% map(., 
 l_coefs_change = fw_funs_change %>% map(., ~calc_coefs(tl_predvalues_change, lag_seq, .)) %>% map(., ~exp(.))
 
 # figures of f*w functions for amount of training load
-par(mfrow=c(2,2))
+png("figure1_relationships_amount.png", units = "in", width = 10, height = 10, res = 600)
+par(mfrow=c(2,2), mar=c(0.8,0.1,1,0.1), mgp = c(4, 1, 0))
 persp(x = tl_predvalues, y = lag_seq, l_coefs[[1]], ticktype="detailed", theta=230, ltheta=150, phi=40, lphi=30,
-      ylab="Lag (Days)", zlab="RR", shade=0.75, r=sqrt(3), d=5, cex.axis=0.7, cex.lab=0.8,
-      border=grey(0.2), col = nih_distinct[1], xlab = "sRPE (AU)")
+      ylab="Lag (Days)", zlab="HR", shade=0.75, r=sqrt(3), d=5, cex.axis=1.0, cex.lab=1.0,
+      border=grey(0.2), col = nih_distinct[1], xlab = "sRPE (AU)", main = "A Constant")
 
 persp(x = tl_predvalues, y = lag_seq, l_coefs[[2]], ticktype="detailed", theta=230, ltheta=150, phi=40, lphi=30,
-      ylab="Lag (Days)", zlab="RR", shade=0.75, r=sqrt(3), d=5, cex.axis=0.7, cex.lab=0.8,
-      border=grey(0.2), col = nih_distinct[1], xlab = "sRPE(AU)")
+      ylab="Lag (Days)", zlab="HR", shade=0.75, r=sqrt(3), d=5, cex.axis=1.0, cex.lab=1.0,
+      border=grey(0.2), col = nih_distinct[1], xlab = "sRPE(AU)", main = "B Decay")
 
 persp(x = tl_predvalues, y = lag_seq, l_coefs[[3]], ticktype="detailed", theta=230, ltheta=150, phi=40, lphi=30,
-      ylab="Lag (Days)", zlab="RR", shade=0.75, r=sqrt(3), d=5, cex.axis=0.7, cex.lab=0.8,
-      border=grey(0.2), col = nih_distinct[1], xlab = "sRPE (AU)")
+      ylab="Lag (Days)", zlab="HR", shade=0.75, r=sqrt(3), d=5, cex.axis=1.0, cex.lab=1.0,
+      border=grey(0.2), col = nih_distinct[1], xlab = "sRPE (AU)", main = "C Exponential Decay")
 
 persp(x = tl_predvalues, y = lag_seq, l_coefs[[4]], ticktype="detailed", theta=230, ltheta=150, phi=40, lphi=30,
-      ylab="Lag (Days)", zlab="RR", shade=0.75, r=sqrt(3), d=5, cex.axis=0.7, cex.lab=0.8,
-      border=grey(0.2), col = nih_distinct[1], xlab = "sRPE")
+      ylab="Lag (Days)", zlab="HR", shade=0.75, r=sqrt(3), d=5, cex.axis=1.0, cex.lab=1.0,
+      border=grey(0.2), col = nih_distinct[1], xlab = "sRPE (AU)", main = "D Direct, then inverse")
+dev.off()
 
-par(mfrow=c(2,2))
+png("figure2_relationships_change.png", units = "in", width = 10, height = 10, res = 600)
+par(mfrow=c(2,2), mar=c(0.8,0.1,1,0.1), mgp = c(4, 1, 0))
 # figures for change in load
 persp(x = tl_predvalues_change, y = lag_seq, l_coefs_change[[1]], ticktype="detailed", theta=230, ltheta=150, phi=40, lphi=30,
-      ylab="Lag (Days)", zlab="RR", shade=0.75, r=sqrt(3), d=5, cex.axis=0.7, cex.lab=0.8,
-      border=grey(0.2), col = nih_distinct[1], xlab = "%ΔsRPE (AU)")
+      ylab="Lag (Days)", zlab="HR", shade=0.75, r=sqrt(3), d=5, cex.axis=1.0, cex.lab=1.0,
+      border=grey(0.2), col = nih_distinct[1], xlab = "%ΔsRPE (AU)", main = "A Constant")
 
 persp(x = tl_predvalues_change, y = lag_seq, l_coefs_change[[2]], ticktype="detailed", theta=230, ltheta=150, phi=40, lphi=30,
-      ylab="Lag (Days)", zlab="RR", shade=0.75, r=sqrt(3), d=5, cex.axis=0.7, cex.lab=0.8,
-      border=grey(0.2), col = nih_distinct[1], xlab = "%ΔsRPE (AU)")
+      ylab="Lag (Days)", zlab="HR", shade=0.75, r=sqrt(3), d=5, cex.axis=1.0, cex.lab=1.0,
+      border=grey(0.2), col = nih_distinct[1], xlab = "%ΔsRPE (AU)", main = "B Decay")
 
 persp(x = tl_predvalues_change, y = lag_seq, l_coefs_change[[3]], ticktype="detailed", theta=230, ltheta=150, phi=40, lphi=30,
-      ylab="Lag (Days)", zlab="RR", shade=0.75, r=sqrt(3), d=5, cex.axis=0.7, cex.lab=0.8,
-      border=grey(0.2), col = nih_distinct[1], xlab = "%ΔsRPE (AU)")
+      ylab="Lag (Days)", zlab="HR", shade=0.75, r=sqrt(3), d=5, cex.axis=1.0, cex.lab=1.0,
+      border=grey(0.2), col = nih_distinct[1], xlab = "%ΔsRPE (AU)", main = "C Exponential Decay")
+dev.off()
