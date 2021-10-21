@@ -319,8 +319,22 @@ ra = function(x, n_days = lag_max+1, window = TRUE, ...){
 # using similar syntax as the RA-function
 # wilder=FALSE (the default) uses an exponential smoothing ratio of 2/(n+1)
 # same as in williams et al. 2016
-ewma = function(x, n_days = lag_max +1){
+ewma = function(x, n_days = lag_max+1){
   TTR::EMA(x, n = n_days, wilder = FALSE)
+}
+
+# robust exponential decreasing index (REDI)
+# for details, see: http://dx.doi.org/10.1136/bmjsem-2019-000573
+redi = function(x, n_days = lag_max+1, lag = lag_seq, lambda = 0.1){
+  lambda = lambda
+  lag_effect = exp((-lambda)*lag)
+  t_max = length(x)
+  vec = n_days:t_max
+  for(i in 1:(t_max-(n_days-1))){
+    tl = lead(x, i-1)[1:n_days]
+    vec[i] = sum(lag_effect*tl)/sum(lag_effect)
+  }
+  vec 
 }
 
 # functions for calculating ra on a sliding window that moves one day at a time.
@@ -344,13 +358,16 @@ function_on_list = function(d_sim_hist, FUN = NULL, day_start){
 
 d_sim_hist_ra = function_on_list(d_sim_tl_hist, ra, lag_max+1) %>% rename(ra_t_load = data)
 d_sim_hist_ewma = function_on_list(d_sim_tl_hist, ewma, lag_max+1) %>% rename(ewma_t_load = data)
+d_sim_hist_redi = function_on_list(d_sim_tl_hist, redi, lag_max+1) %>% rename(redi_t_load = data)
 
 # calc rolling average and ewma on training load amount
 d_survival_sim_cpform_mods = d_survival_sim_cpform %>% filter(exit >= lag_max+1)
 d_survival_sim_cpform_mods = d_survival_sim_cpform_mods %>% left_join(d_sim_hist_ra, by = c("id", "exit" = "day"))
 d_survival_sim_cpform_mods = d_survival_sim_cpform_mods %>% left_join(d_sim_hist_ewma, by = c("id", "exit" = "day"))
+d_survival_sim_cpform_mods = d_survival_sim_cpform_mods %>% left_join(d_sim_hist_redi, by = c("id", "exit" = "day"))
 ob_ra = onebasis(d_survival_sim_cpform_mods$ra_t_load, "poly", degree = 2)
 ob_ewma = onebasis(d_survival_sim_cpform_mods$ewma_t_load, "poly", degree = 2)
+ob_redi = onebasis(d_survival_sim_cpform_mods$redi_t_load, "poly", degree = 2)
 cb_dlnm = crossbasis(q_mat_same_n, lag=c(lag_min, lag_max), 
                      argvar = list(fun="poly", degree = 2),
                      arglag = list(fun="ns", knots = 3))
@@ -423,6 +440,7 @@ cox_basis = function(d_sim_surv, basis){
 
 fit_ra = cox_basis(d_survival_sim_cpform_mods, ob_ra)
 fit_ewma = cox_basis(d_survival_sim_cpform_mods, ob_ewma)
+fit_redi = cox_basis(d_survival_sim_cpform_mods, ob_redi)
 fit_dlnm = cox_basis(d_survival_sim_cpform_mods, cb_dlnm)
 
 fit_acwr = cox_basis(d_survival_sim_cpform_mods, ob_acwr)
@@ -433,6 +451,7 @@ fit_dlnm = cox_basis(d_survival_sim_cpform_mods, cb_dlnm_change)
   
 aic_ra = AIC(fit_ra)
 aic_ewma = AIC(fit_ewma)
+aic_redi = AIC(fit_redi)
 aic_dlnm = AIC(fit_dlnm)  
 
 anova(fit_ra, fit_ewma, fit_dlnm)
