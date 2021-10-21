@@ -151,8 +151,8 @@ calc_q_matrix = function(d_counting_process, d_tl_hist_wide){
 # Function for calculating rolling averages on a chooseable number of days
 # Based on rollapplyr, not rollmean, as rollmean will only start calculating averages
 # at n values, while rollapplyr allows the user to decide preliminary values.
-ra = function(x, n_days, window = TRUE, ...){
-  zoo::rollapplyr(x, n_days, mean, partial = window)
+ra = function(x, n_days = lag_max+1, window = TRUE, ...){
+  zoo::rollapplyr(x, n_days, mean, partial = FALSE)
 }
 
 # function for calculating exponentially waited moving averages
@@ -161,16 +161,6 @@ ra = function(x, n_days, window = TRUE, ...){
 # same as in williams et al. 2016
 ewma = function(x, n_days = lag_max+1){
   TTR::EMA(x, n = n_days, wilder = FALSE)
-}
-
-# functions for calculating ra on a sliding window that moves one day at a time.
-# this ensures that RA isn't calculated until the first 4 weeks have passed
-# the ewma function already does this
-slide_ra = function(x){
-  l = slide(x, ~ra(., lag_max+1), .before = lag_max, step = 1, .complete =TRUE) %>% map(last)
-  l = compact(l)
-  l = unlist(l)
-  l
 }
 
 # calculate 7:28 coupled ACWR (this becomes, in theory, a measure of change)
@@ -230,7 +220,7 @@ sim_fit_and_res = function(nsub, t_max, tl_values, t_load_type, tl_var, fvar, fl
   if(t_load_type == "amount"){
 
   # calc rolling average and ewma on training load amount
-  d_sim_hist_ra = function_on_list(d_tl_hist, slide_ra, lag_max+1) %>% rename(ra_t_load = data)
+  d_sim_hist_ra = function_on_list(d_tl_hist, ra, lag_max+1) %>% rename(ra_t_load = data)
   d_sim_hist_ewma = function_on_list(d_tl_hist, ewma, lag_max+1) %>% rename(ewma_t_load = data)
   
   # remove the first 28 rows for comparability of the AIC, which requires the same sample size for all models

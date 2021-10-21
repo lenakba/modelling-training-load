@@ -311,8 +311,8 @@ q_mat_same_n = q_mat %>% as_tibble() %>% mutate(day = as.numeric(rownames(q_mat)
 # Function for calculating rolling averages on a chooseable number of days
 # Based on rollapplyr, not rollmean, as rollmean will only start calculating averages
 # at n values, while rollapplyr allows the user to decide preliminary values.
-ra = function(x, n_days = lag_max, window = TRUE, ...){
-  zoo::rollapplyr(x, n_days, mean, partial = window)
+ra = function(x, n_days = lag_max+1, window = TRUE, ...){
+  zoo::rollapplyr(x, n_days, mean, partial = FALSE)
 }
 
 # function for calculating exponentially waited moving averages
@@ -342,7 +342,7 @@ function_on_list = function(d_sim_hist, FUN = NULL, day_start){
   l_unnest
 }
 
-d_sim_hist_ra = function_on_list(d_sim_tl_hist, slide_ra, lag_max+1) %>% rename(ra_t_load = data)
+d_sim_hist_ra = function_on_list(d_sim_tl_hist, ra, lag_max+1) %>% rename(ra_t_load = data)
 d_sim_hist_ewma = function_on_list(d_sim_tl_hist, ewma, lag_max+1) %>% rename(ewma_t_load = data)
 
 # calc rolling average and ewma on training load amount
