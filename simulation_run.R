@@ -163,6 +163,20 @@ ewma = function(x, n_days = lag_max+1){
   TTR::EMA(x, n = n_days, wilder = FALSE)
 }
 
+# robust exponential decreasing index (REDI)
+# for details, see: http://dx.doi.org/10.1136/bmjsem-2019-000573
+redi = function(x, n_days = lag_max+1, lag = lag_seq, lambda = 0.1){
+  lambda = lambda
+  lag_effect = exp((-lambda)*lag)
+  t_max = length(x)
+  vec = n_days:t_max
+  for(i in 1:(t_max-(n_days-1))){
+    tl = lead(x, i-1)[1:n_days]
+    vec[i] = sum(lag_effect*tl)/sum(lag_effect)
+  }
+  vec 
+}
+
 # calculate 7:28 coupled ACWR (this becomes, in theory, a measure of change)
 # use equation in Lolli et al. 2017, most common in football studies Wang et al. 2021.
 slide_sum = function(x){
@@ -222,22 +236,26 @@ sim_fit_and_res = function(nsub, t_max, tl_values, t_load_type, tl_var, fvar, fl
   # calc rolling average and ewma on training load amount
   d_sim_hist_ra = function_on_list(d_tl_hist, ra, lag_max+1) %>% rename(ra_t_load = data)
   d_sim_hist_ewma = function_on_list(d_tl_hist, ewma, lag_max+1) %>% rename(ewma_t_load = data)
+  d_sim_hist_redi = function_on_list(d_tl_hist, redi, lag_max+1) %>% rename(redi_t_load = data)
   
   # remove the first 28 rows for comparability of the AIC, which requires the same sample size for all models
   d_survival_sim_cpform_mods = d_survival_sim_cpform %>% filter(exit >= lag_max+1)
   d_survival_sim_cpform_mods = d_survival_sim_cpform_mods %>% left_join(d_sim_hist_ra, by = c("id", "exit" = "day"))
   d_survival_sim_cpform_mods = d_survival_sim_cpform_mods %>% left_join(d_sim_hist_ewma, by = c("id", "exit" = "day"))
+  d_survival_sim_cpform_mods = d_survival_sim_cpform_mods %>% left_join(d_sim_hist_redi, by = c("id", "exit" = "day"))
   
   # calculate one- and crossbasis for the model
   if(direction_flip){
     ob_ra = onebasis(d_survival_sim_cpform_mods$ra_t_load, "lin")
     ob_ewma = onebasis(d_survival_sim_cpform_mods$ewma_t_load, "lin")
+    ob_redi = onebasis(d_survival_sim_cpform_mods$redi_t_load, "lin")
     cb_dlnm = crossbasis(q_mat_same_n, lag=c(lag_min, lag_max), 
                          argvar = list(fun="lin"),
                          arglag = list(fun="ns", knots = 3))   
   } else {
   ob_ra = onebasis(d_survival_sim_cpform_mods$ra_t_load, "poly", degree = 2)
   ob_ewma = onebasis(d_survival_sim_cpform_mods$ewma_t_load, "poly", degree = 2)
+  ob_redi = onebasis(d_survival_sim_cpform_mods$redi_t_load, "poly", degree = 2)
   cb_dlnm = crossbasis(q_mat_same_n, lag=c(lag_min, lag_max), 
                        argvar = list(fun="poly", degree = 2),
                        arglag = list(fun="ns", knots = 3))
@@ -245,11 +263,13 @@ sim_fit_and_res = function(nsub, t_max, tl_values, t_load_type, tl_var, fvar, fl
 
   fit_ra = coxph(Surv(enter, exit, event) ~ ob_ra, d_survival_sim_cpform_mods, y = FALSE, ties = "efron")
   fit_ewma = coxph(Surv(enter, exit, event) ~ ob_ewma, d_survival_sim_cpform_mods, y = FALSE, ties = "efron")
+  fit_redi = coxph(Surv(enter, exit, event) ~ ob_redi, d_survival_sim_cpform_mods, y = FALSE, ties = "efron")
   fit_dlnm = coxph(Surv(enter, exit, event) ~ cb_dlnm, d_survival_sim_cpform_mods, y = FALSE, ties = "efron")
-  list_fits = list(fit_ra, fit_ewma, fit_dlnm)
+  list_fits = list(fit_ra, fit_ewma, fit_redi, fit_dlnm)
 
   cp_preds_ra = crosspred(ob_ra, fit_ra, at = predvalues, cen = 600, cumul = TRUE)
   cp_preds_ewma = crosspred(ob_ewma, fit_ewma, at = predvalues, cen = 600, cumul = TRUE)
+  cp_preds_redi = crosspred(ob_redi, fit_redi, at = predvalues, cen = 600, cumul = TRUE)
   cp_preds_dlnm = crosspred(cb_dlnm, fit_dlnm, at = predvalues, cen = 600, cumul = TRUE)
   
   d_ra = bind_cols(t_load = predvalues, 
@@ -266,6 +286,13 @@ sim_fit_and_res = function(nsub, t_max, tl_values, t_load_type, tl_var, fvar, fl
                    rmse_residuals = rmse_residuals(fit_ewma$residuals),
                    method = "ewma")
   
+  d_redi = bind_cols(t_load = predvalues, 
+                     cumul = cp_preds_redi$allfit, 
+                     se = cp_preds_redi$allse,
+                     aic = AIC(fit_redi),
+                     rmse_residuals = rmse_residuals(fit_redi$residuals),
+                     method = "redi")
+  
   d_dlnm = bind_cols(t_load = predvalues, 
                    cumul = cp_preds_dlnm$allfit, 
                    se = cp_preds_dlnm$allse,
@@ -273,7 +300,7 @@ sim_fit_and_res = function(nsub, t_max, tl_values, t_load_type, tl_var, fvar, fl
                    rmse_residuals = rmse_residuals(fit_dlnm$residuals),
                    method = "dlnm")
   
-  d_res = bind_rows(d_ra, d_ewma, d_dlnm)
+  d_res = bind_rows(d_ra, d_ewma, d_redi, d_dlnm)
   
   } else if(t_load_type == "change"){
     
@@ -388,12 +415,12 @@ for(i in seqsim){
                   predvalues = tl_predvalues, i = i, folder = folder_lin_direction_flip, direction_flip = TRUE)
   
   # change in training load
-  sim_fit_and_res(nsub, t_max, tl_valid, "change", tl_var = t_load_change, fvar = flin, flag = wconst,
-                  predvalues = tl_predvalues_change, i = i, folder = folder_lin_constant)
-  sim_fit_and_res(nsub, t_max, tl_valid, "change", tl_var = t_load_change, fvar = flin, flag = wdecay,
-                  predvalues = tl_predvalues_change, i = i, folder = folder_lin_decay)
-  sim_fit_and_res(nsub, t_max, tl_valid, "change", tl_var = t_load_change, fvar = flin, flag = wexponential_decay,
-                  predvalues = tl_predvalues_change, i = i, folder = folder_lin_exponential_decay)
+  # sim_fit_and_res(nsub, t_max, tl_valid, "change", tl_var = t_load_change, fvar = flin, flag = wconst,
+  #                 predvalues = tl_predvalues_change, i = i, folder = folder_lin_constant)
+  # sim_fit_and_res(nsub, t_max, tl_valid, "change", tl_var = t_load_change, fvar = flin, flag = wdecay,
+  #                 predvalues = tl_predvalues_change, i = i, folder = folder_lin_decay)
+  # sim_fit_and_res(nsub, t_max, tl_valid, "change", tl_var = t_load_change, fvar = flin, flag = wexponential_decay,
+  #                 predvalues = tl_predvalues_change, i = i, folder = folder_lin_exponential_decay)
 }
 
 #-----------------------Option: multiple cores
