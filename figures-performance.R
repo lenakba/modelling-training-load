@@ -35,9 +35,10 @@ ostrc_theme =  theme(panel.border = element_blank(),
 ############################################### Predicted values vs. true coefs (amount only) ###############################################
 
 # pred vs. true coefs, 3 main relationships
-d_amount_1rep = d_res_amount %>% filter(rep == 1)
+d_amount_1rep = d_res_amount %>% filter(rep == 5)
 d_amount_3rels = d_amount_1rep %>% filter(relationship != "Linear Direction Change")
-
+d_directionflip = d_amount_1rep %>% filter(relationship == "Linear Direction Change")
+  
 preds_plot = function(d, x, xlab, compare = TRUE){
   x = enquo(x)
   
@@ -56,11 +57,11 @@ preds_plot = function(d, x, xlab, compare = TRUE){
 }
 
 preds_plot(d_amount_3rels, t_load, "sRPE (AU) on Day 0")  +
-  facet_wrap(c("relationship", "method_fac"), ncol = 3, scales = "free") +
+  facet_wrap(c("relationship", "method_fac"), ncol = 4, scales = "free") +
   scale_y_continuous(limit = c(-15, 20), breaks = scales::breaks_width(5)) 
 
 preds_plot(d_directionflip, t_load, "sRPE (AU) on Day 0") + 
-  facet_wrap(~method_fac, ncol = 3, scales = "free") 
+  facet_wrap(~method_fac, ncol = 2, scales = "free") 
 
 # for labels?
 # rel_labs <- c("A Constant", "B Constant", "C Constant", "D Decay", "E Decay", "F Decay", "G Exponential Decay", "H Exponential Decay", "I Exponential Decay")
