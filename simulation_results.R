@@ -168,7 +168,9 @@ d_res_amount = l_res_amount %>%
   map(. %>% group_by(method, rep)) %>% 
   map2(.x = .,
        .y = fw_funs,
-       ~add_true_coefs(.x, tl_predvalues, lag_seq, .y)) %>% bind_rows()
+       ~add_true_coefs(.x, tl_predvalues, lag_seq, .y)) %>% 
+  bind_rows() %>% 
+  ungroup()
 
 nsims = max(d_res_amount$rep)
 d_res_amount = d_res_amount %>% group_by(relationship, method, rep) %>% 
