@@ -657,88 +657,15 @@ ggplot(d_cumulative_preds, aes(x = t_load)) +
 ######################################################## 3D GRAPHS OF PREDICTED VALUES FOR ASSESSING MODEL FIT
 
 
-cb_j_decay = crossbasis(l_q_matrices[[2]],
-                        lag=c(lag_min, lag_max),
-                        argvar = list(fun="ns", knots = 3, intercept = FALSE),
-                        arglag = list(fun="ns", knots = 3))
-
-mod_j_decay = coxph(Surv(enter, exit, event) ~ l_crossbases_amount[[2]], l_counting_survival_sim[[2]], y = FALSE, ties = "efron")
-
-# for a onebasis model (rolling average)
-test_ra = l_survival_sim_basemethods[[2]]$ra_t_load
-ob_ra = onebasis(test_ra,"lin")
-mod_j_decay_ra = coxph(Surv(Start, Stop, Event) ~ ob_ra, l_survival_sim_basemethods[[2]], y = FALSE, ties = "efron")
-pred_j_decay_ra = crosspred(ob_ra, mod_j_decay_ra, at = tl_predvalues, cen = 300, cumul = TRUE)
-
-# for change in load
-cb_lin_decay = crossbasis(l_q_matrices_change[[2]],
-                          lag=c(lag_min, lag_max),
-                          argvar = list(fun="ns", knots = 3, intercept = FALSE),
-                          arglag = list(fun="ns", knots = 3))
-
-mod_lin_decay = coxph(Surv(enter, exit, event) ~ cb_lin_decay, l_counting_survival_sim_change[[2]], y = FALSE, ties = "efron")
-
-# OBTAIN THE PREDICTED RISK FOR A SEQUENCE OF TL LEVELS
-cb_j_decay = l_crossbases_amount[[2]]
-
-pred_j_decay = crosspred(cb_j_decay, mod_j_decay, at = tl_predvalues, cen = 300, cumul = TRUE)
-pred_lin_decay = crosspred(cb_lin_decay, mod_lin_decay, at = tl_predvalues_change, cen = 0, cumul = TRUE)
-
+cp_preds_dlnm = crosspred(cb_dlnm, fit_dlnm, at = tl_predvalues, cen = 600, cumul = TRUE)
 
 # j decay
 persp(x = tl_predvalues, y = lag_seq, l_coefs[[2]], ticktype="detailed", theta=230, ltheta=150, phi=40, lphi=30,
       ylab="Lag (Days)", zlab="HR", shade=0.75, r=sqrt(3), d=5,
       border=grey(0.2), col = nih_distinct[1], xlab = "sRPE")
 
-persp(x = tl_predvalues, y = lag_seq, pred_j_decay$matRRfit, ticktype="detailed", theta=230, ltheta=150, phi=40, lphi=30,
+persp(x = tl_predvalues, y = lag_seq, cp_preds_dlnm$matRRfit, ticktype="detailed", theta=230, ltheta=150, phi=40, lphi=30,
       ylab="Lag (Days)", zlab="HR", shade=0.75, r=sqrt(3), d=5,
       border=grey(0.2), col = nih_distinct[1], xlab = "sRPE")
 
-persp(x = tl_predvalues_change, y = lag_seq, l_coefs_change[[2]], ticktype="detailed", theta=230, ltheta=150, phi=40, lphi=30,
-      ylab="Lag (Days)", zlab="HR", shade=0.75, r=sqrt(3), d=5,
-      border=grey(0.2), col = nih_distinct[1], xlab = "sRPE")
 
-persp(x = tl_predvalues_change, y = lag_seq, pred_lin_decay$matRRfit, ticktype="detailed", theta=230, ltheta=150, phi=40, lphi=30,
-      ylab="Lag (Days)", zlab="HR", shade=0.75, r=sqrt(3), d=5, 
-      border=grey(0.2), col = nih_distinct[1], xlab = "sRPE")
-
-
-
-
-
-
-
-library(ggeffects)
-preds_ra = ggpredict(fit_ra)
-ggplot(preds_ra, aes(x, predicted)) + geom_line()
-
-preds_ra[[3]]
-
-fit_ra = survfit(Surv(Start, Stop, Event) ~ cb_ra, data = d_survival_sim_cpform_mods)
-class(fit_ra)
-
-library(survminer)
-ggsurvplot(
-  fit_ra,
-  size = 0.5,
-  # lines become thicker in the pdf version
-  conf.int = FALSE,
-  risk.table = FALSE,
-  tables.col = NULL,
-  palette = nih_distinct[4],
-  ggtheme = theme_line(), # from ostrc-package
-  censor = FALSE,
-  ylab = "",
-  xlab = "Days",
-  title = "Probability of Sports Injury",
-  tables.y.text = FALSE,
-  fontsize = 10,
-  axes.offset = FALSE,
-  break.x.by = 2
-)
-?ggsurvplot
-
-# lists of functions
-flist = list(fj, fj, fj, flin)
-wlist = list(wconst, wdecay, wexponential_decay, wdirection_flip)
-wlist_change = list(wconst, wdecay, wexponential_decay)
