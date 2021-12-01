@@ -27,7 +27,22 @@ file_types = c("fits", "res")
 # "simulation_results_amount.csv" and "simulation_results_change.csv"
 # read the csv file to save time, or run all the for-loops and functions again
 d_res_amount = read_delim("simulation_results_amount.csv", delim = ";")
-d_res_change = read_delim("simulation_results_change.csv", delim = ";")
+d_res_change = read_delim("simulation_results_change.csv", delim = ";", col_types = cols(
+  t_load_acwr = col_double(),
+  cumul = col_double(),
+  se = col_double(),
+  aic = col_double(),
+  rmse_residuals = col_double(),
+  method = col_character(),
+  t_load_weekly_change = col_double(),
+  t_load_change = col_double(),
+  rep = col_double(),
+  relationship = col_character(),
+  true_cumul_coefs = col_double(),
+  ci_high = col_double(),
+  ci_low = col_double(),
+  aw = col_double()
+))
 
 ################################### Amount
 #------------amount, j constant
@@ -90,12 +105,10 @@ l_res_amount = list(d_res_j_constant, d_res_j_decay, d_res_j_exponential_decay, 
 #------------change, lin constant
 files_fits = list.files(path = folder_lin_constant)
 n_sim = length(files_fits)/length(file_types) # divide by the number of file types
-l_fits_lin_constant = list()
 d_res_lin_constant = data.frame()
 for(i in 1:n_sim){
   temp_data_fits = readRDS(paste0(folder_lin_constant, "fits_",i,"_.rds"))
   temp_data_res = readRDS(paste0(folder_lin_constant, "res_",i,"_.rds"))
-  l_fits_lin_constant = append(l_fits_lin_constant, temp_data_fits)
   d_res_lin_constant = rbind(d_res_lin_constant, temp_data_res)
 }
 d_res_lin_constant = d_res_lin_constant %>% mutate(relationship = "Constant")
@@ -103,12 +116,10 @@ d_res_lin_constant = d_res_lin_constant %>% mutate(relationship = "Constant")
 #------------amount, lin decay
 files_fits = list.files(path = folder_lin_decay)
 n_sim = length(files_fits)/length(file_types) # divide by the number of file types
-l_fits_lin_decay = list()
 d_res_lin_decay = data.frame()
 for(i in 1:n_sim){
   temp_data_fits = readRDS(paste0(folder_lin_decay, "fits_",i,"_.rds"))
   temp_data_res = readRDS(paste0(folder_lin_decay, "res_",i,"_.rds"))
-  l_fits_lin_decay = append(l_fits_lin_decay, temp_data_fits)
   d_res_lin_decay = rbind(d_res_lin_decay, temp_data_res)
 }
 d_res_lin_decay = d_res_lin_decay %>% mutate(relationship = "Decay")
@@ -116,12 +127,10 @@ d_res_lin_decay = d_res_lin_decay %>% mutate(relationship = "Decay")
 #------------amount, lin exponential decay
 files_fits = list.files(path = folder_lin_exponential_decay)
 n_sim = length(files_fits)/length(file_types) # divide by the number of file types
-l_fits_lin_exponential_decay = list()
 d_res_lin_exponential_decay = data.frame()
 for(i in 1:n_sim){
   temp_data_fits = readRDS(paste0(folder_lin_exponential_decay, "fits_",i,"_.rds"))
   temp_data_res = readRDS(paste0(folder_lin_exponential_decay, "res_",i,"_.rds"))
-  l_fits_lin_exponential_decay = append(l_fits_lin_exponential_decay, temp_data_fits)
   d_res_lin_exponential_decay = rbind(d_res_lin_exponential_decay, temp_data_res)
 }
 d_res_lin_exponential_decay = d_res_lin_exponential_decay %>% mutate(relationship = "Exponential Decay")
@@ -148,7 +157,7 @@ lag_min = 0
 lag_max = 27
 lag_seq = lag_min:lag_max # number of days before current day assumed to affect risk of injury
 tl_predvalues = d_res_j_constant %>% filter(rep == 1, method == "ra") %>% pull(t_load)
-tl_predvalues_change = d_res_lin_constant %>% filter(rep == 1, method == "dlnm") %>% pull(t_load_change)
+tl_predvalues_change = d_res_lin_constant %>% filter(rep == 1, method == "dlnm %Δ") %>% pull(t_load_change)
 
 # function for adding the true cumulative effect given the fw-function
 add_true_coefs = function(d_res, tl_predvalues, lag_seq, fw){
@@ -157,6 +166,9 @@ add_true_coefs = function(d_res, tl_predvalues, lag_seq, fw){
   d_res = d_res %>% mutate(true_cumul_coefs = truecumcoefs)
   d_res
 }
+
+# variables in both amount and change
+perf_internal = c("aic", "rmse_residuals", "aw")
 
 #---------------Amount
 
@@ -185,12 +197,24 @@ d_res_amount = d_res_amount %>% group_by(relationship, method, rep) %>%
                          mcse_coverage = mcse_coverage(ci_low, ci_high, true_cumul_coefs, n(), nsims)) %>% 
                   ungroup()
 
-perf_internal = c("aic", "rmse_residuals", "aw")
+# variables in amount only
 perf_external = c("rmse", "coverage")
 d_perf_params_amount = d_res_amount %>% group_by(relationship, method) %>% summarise_at(vars(all_of(perf_internal), all_of(perf_external), starts_with("mcse")), mean)
 
 #---------------Change
-d_res_change = l_res_change %>% bind_rows()
+
+# add true coefs (can only compare with DLNM)
+d_res_change_dlnm = l_res_change %>% 
+  map(. %>% filter(method == "dlnm %Δ") %>% group_by(rep)) %>% 
+  map2(.x = .,
+       .y = fw_funs_change,
+       ~add_true_coefs(.x, tl_predvalues_change, lag_seq, .y)) %>% 
+  bind_rows() %>% 
+  ungroup()
+
+d_res_change_other = l_res_change %>%  map(. %>% filter(method != "dlnm %Δ")) %>% bind_rows()
+d_res_change = bind_rows(d_res_change_other, d_res_change_dlnm)
+
 d_res_change = d_res_change %>% 
   group_by(relationship, method, rep) %>% 
   mutate(ci_high = calc_ci(cumul, se, "high"), 
