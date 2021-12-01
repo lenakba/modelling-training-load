@@ -194,7 +194,7 @@ calc_cumeffs_all = function(d_sim_hist, t_load_type = "amount", fvar, flag){
   d_cumeffs
 }
 
-d_cumeff = calc_cumeffs_all(d_sim_tl_hist, t_load_type = "amount", fj, wdecay)
+d_cumeff = calc_cumeffs_all(d_sim_tl_hist, t_load_type = "change", flin, wdecay)
 
 ########################################Simulate injuries based on cumulative effect of training load#####################
 d_cumeff_mat = d_cumeff %>% mutate(day = rep(1:t_max, nsub)) %>% 
@@ -220,7 +220,7 @@ sim_survdata = function(nsub, t_max, tl_values, t_load_type, fvar, flag){
   d_survival_sim
 } 
 set.seed(1234)
-d_survival_sim = sim_survdata(nsub, t_max, tl_valid, t_load_type = "amount", fvar = fj, flag = wdecay)
+d_survival_sim = sim_survdata(nsub, t_max, tl_valid, t_load_type = "change", fvar = flin, flag = wdecay)
 
 # estimate common number of events
 set.seed(1234)
@@ -297,8 +297,8 @@ calc_q_matrix = function(d_counting_process, d_tl_hist_wide){
 # arrange the exposure history in wide format in a matrix
 # which is neeeded for calculating the q-matrix for the crossbasis
 d_sim_tl_hist_spread_day = 
-  d_sim_tl_hist %>% select(-t_load_change) %>% 
-  pivot_wider(names_from = day, values_from = t_load) %>% select(-id) %>% as.matrix
+  d_sim_tl_hist %>% select(-t_load) %>% 
+  pivot_wider(names_from = day, values_from = t_load_change) %>% select(-id) %>% as.matrix
 d_survival_sim_cpform = counting_process_form(d_survival_sim)
 q_mat = calc_q_matrix(d_survival_sim_cpform, d_sim_tl_hist_spread_day)
 q_mat_same_n = q_mat %>% as_tibble() %>% mutate(day = as.numeric(rownames(q_mat))) %>% 
@@ -417,17 +417,17 @@ d_sim_hist_weekly = d_sim_hist_weekly %>%
   filter(!is.na(day)) %>% ungroup()
 
 # couple survival data with change in load data
+d_survival_sim_cpform_mods = d_survival_sim_cpform %>% filter(exit >= lag_max+1)
+
 d_survival_sim_cpform_mods = d_survival_sim_cpform_mods %>% 
                              left_join(d_sim_hist_acwr, by = c("id", "exit" = "day"))
 
 d_survival_sim_cpform_mods = d_survival_sim_cpform_mods %>% 
                              left_join(d_sim_hist_weekly, by = c("id", "exit" = "day"))
 
-d_survival_sim_cpform_mods = d_survival_sim_cpform_mods %>% filter(exit >= lag_max+1)
-
 ob_acwr = onebasis(d_survival_sim_cpform_mods$acwr, "lin")
 ob_weekly_change = onebasis(d_survival_sim_cpform_mods$weekly_change, "lin")
-cb_dlnm_change = crossbasis(q_mat, lag=c(lag_min, lag_max), 
+cb_dlnm_change = crossbasis(q_mat_same_n, lag=c(lag_min, lag_max), 
                      argvar = list(fun="lin"),
                      arglag = list(fun="ns", knots = 3))
 
@@ -474,8 +474,6 @@ sqrt(mean(fit_dlnm$residuals^2))
 
 
 ## compare true coefs vs. predicted coefs
-true_effect = calc_coefs(tl_predvalues_change, lag_seq, flindecay)
-truecumcoefs = rowSums(true_effect)
 
 cp_preds_ra = crosspred(ob_ra, fit_ra, at = tl_predvalues, cen = 600, cumul = TRUE)
 cp_preds_ewma = crosspred(ob_ewma, fit_ewma, at = tl_predvalues, cen = 600, cumul = TRUE)
@@ -599,6 +597,10 @@ persp(x = tl_predvalues, y = lag_seq, cp_preds_dlnm$matRRfit, ticktype="detailed
 #------------------Figures for change in load
 
 
+cp_preds_acwr = crosspred(ob_acwr, fit_acwr, at = tl_predvalues_acwr, cumul = TRUE)
+cp_preds_weekly_change = crosspred(ob_weekly_change, fit_weekly_change, at = tl_predvalues_weekly_change, cumul = TRUE)
+cp_preds_dlnm = crosspred(cb_dlnm_change, fit_dlnm, at = tl_predvalues_change, cumul = TRUE)
+
 calc_ci = function(estimate, se, dir = NULL){
   qn = qnorm(0.95)  
   if(dir == "high"){
@@ -634,10 +636,39 @@ d_cumulative_preds = bind_cols(t_load = tl_predvalues_change,
 
 d_cumulative_preds = bind_rows(d_cumulative_preds_acwr, d_cumulative_preds_weekly_change, d_cumulative_preds)
 
+d_cumulative_preds %>% View()
 
 text_size = 14
 ggplot(d_cumulative_preds, aes(x = t_load)) +
   facet_wrap(~method, ncol = 3, scales = "free") +
+  geom_ribbon(aes(min = ci_low, max = ci_high), alpha = 0.3, fill = nih_distinct[1]) + 
+  geom_line(aes(y = cumulative_effect, color = "Estimation"), size = 0.5) +
+  scale_y_continuous(limit = c(-15, 20), breaks = scales::breaks_width(5))  +
+  scale_color_manual(values = c(nih_distinct[1], "Black")) + 
+  ylab("Cumulative Hazard") +
+  xlab("Relative change in sRPE (AU) on Day 0") +
+  theme_line(text_size, legend = TRUE) +
+  theme(panel.border = element_blank(), 
+        panel.background = element_blank(),
+        panel.grid = element_blank(),
+        axis.line = element_line(color = nih_distinct[4]),
+        strip.background = element_blank(),
+        strip.text.x = element_text(size = text_size, family="Trebuchet MS", colour="black", face = "bold", hjust = -0.01),
+        axis.ticks = element_line(color = nih_distinct[4]),
+        legend.position = "bottom")
+
+d_cumul_preds = d_cumulative_preds %>% left_join(cis_high, by = c("t_load", "model")) %>% left_join(cis_low, by = c("t_load", "model")) 
+# true relationship 
+true_effect = calc_coefs(tl_predvalues_change, lag_seq, flindecay)
+truecumcoefs = rowSums(true_effect)
+d_true_coefs = truecumcoefs %>% enframe() %>% rename(t_load = name, truerel = value) %>% mutate(t_load = as.numeric(t_load))
+
+
+
+text_size = 14
+ggplot(d_cumulative_preds, aes(x = t_load)) +
+  facet_wrap(~method, ncol = 3, scales = "free") +
+  geom_line(data = d_true_coefs, aes(y = truerel, color = "True relationship"), size = 0.5) +
   geom_ribbon(aes(min = ci_low, max = ci_high), alpha = 0.3, fill = nih_distinct[1]) + 
   geom_line(aes(y = cumulative_effect, color = "Estimation"), size = 0.5) +
   scale_y_continuous(limit = c(-15, 20), breaks = scales::breaks_width(5))  +
