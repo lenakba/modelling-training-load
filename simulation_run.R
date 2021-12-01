@@ -8,7 +8,7 @@ library(slider) # for running functions on a sliding window of values, moving it
 # and strings aren't automatically read as factors:
 options(scipen = 40, 
         stringsAsFactors = FALSE)
-
+set.seed(1234)
 # assume the training load values are in the same folder
 # as the r script, and that work repository is in the source file location
 d_load = read_delim("norwegian_premier_league_football_td_vec.csv", delim = ";")
@@ -356,7 +356,7 @@ sim_fit_and_res = function(nsub, t_max, tl_values, t_load_type, tl_var, fvar, fl
     # predict cumulative effects with the DLNM syntax
     cp_preds_acwr = crosspred(ob_acwr, fit_acwr, at = tl_predvalues_acwr, cumul = TRUE)
     cp_preds_weekly_change = crosspred(ob_weekly_change, fit_weekly_change, at = tl_predvalues_weekly_change, cumul = TRUE)
-    cp_preds_dlnm = crosspred(cb_dlnm_change, fit_dlnm_change, at = predvalues, cen = 600, cumul = TRUE)
+    cp_preds_dlnm = crosspred(cb_dlnm_change, fit_dlnm_change, at = predvalues, cumul = TRUE)
     
     # create dataset with predicted values and AIC
     d_acwr = bind_cols(t_load_acwr = tl_predvalues_acwr, 
@@ -379,7 +379,6 @@ sim_fit_and_res = function(nsub, t_max, tl_values, t_load_type, tl_var, fvar, fl
                        aic = AIC(fit_dlnm_change),
                        rmse_residuals = rmse_residuals(fit_dlnm_change$residuals),
                        method = "dlnm %Δ")
-    
     d_res = bind_rows(d_acwr, d_weekly_change, d_dlnm) 
   }
   saveRDS(list_fits, file = paste0(folder, "fits_",i,"_.rds"))
@@ -399,28 +398,28 @@ folder_lin_decay = paste0(base_folder, "change_lin_decay\\")
 folder_lin_exponential_decay = paste0(base_folder, "change_lin_exponential_decay\\")
 
 
-startsim = 1
-nsim = 100
+startsim = 4
+nsim = 500
 seqsim = startsim:nsim
 set.seed(1234)
 for(i in seqsim){
   # amount of training load
-  sim_fit_and_res(nsub, t_max, tl_valid, "amount", tl_var = t_load, fvar = fj, flag = wconst,
-                  predvalues = tl_predvalues, i = i, folder = folder_j_constant)
-  sim_fit_and_res(nsub, t_max, tl_valid, "amount", tl_var = t_load, fvar = fj, flag = wdecay,
-                  predvalues = tl_predvalues, i = i, folder = folder_j_decay)
-  sim_fit_and_res(nsub, t_max, tl_valid, "amount", tl_var = t_load, fvar = fj, flag = wexponential_decay,
-                  predvalues = tl_predvalues, i = i, folder = folder_j_exponential_decay)
-  sim_fit_and_res(nsub, t_max, tl_valid, "amount", tl_var = t_load, fvar = flin_amount, flag = wdirection_flip,
-                  predvalues = tl_predvalues, i = i, folder = folder_lin_direction_flip, direction_flip = TRUE)
+  # sim_fit_and_res(nsub, t_max, tl_valid, "amount", tl_var = t_load, fvar = fj, flag = wconst,
+  #                 predvalues = tl_predvalues, i = i, folder = folder_j_constant)
+  # sim_fit_and_res(nsub, t_max, tl_valid, "amount", tl_var = t_load, fvar = fj, flag = wdecay,
+  #                 predvalues = tl_predvalues, i = i, folder = folder_j_decay)
+  # sim_fit_and_res(nsub, t_max, tl_valid, "amount", tl_var = t_load, fvar = fj, flag = wexponential_decay,
+  #                 predvalues = tl_predvalues, i = i, folder = folder_j_exponential_decay)
+  # sim_fit_and_res(nsub, t_max, tl_valid, "amount", tl_var = t_load, fvar = flin_amount, flag = wdirection_flip,
+  #                 predvalues = tl_predvalues, i = i, folder = folder_lin_direction_flip, direction_flip = TRUE)
   
   # change in training load
-  # sim_fit_and_res(nsub, t_max, tl_valid, "change", tl_var = t_load_change, fvar = flin, flag = wconst,
-  #                 predvalues = tl_predvalues_change, i = i, folder = folder_lin_constant)
-  # sim_fit_and_res(nsub, t_max, tl_valid, "change", tl_var = t_load_change, fvar = flin, flag = wdecay,
-  #                 predvalues = tl_predvalues_change, i = i, folder = folder_lin_decay)
-  # sim_fit_and_res(nsub, t_max, tl_valid, "change", tl_var = t_load_change, fvar = flin, flag = wexponential_decay,
-  #                 predvalues = tl_predvalues_change, i = i, folder = folder_lin_exponential_decay)
+  sim_fit_and_res(nsub, t_max, tl_valid, "change", tl_var = t_load_change, fvar = flin, flag = wconst,
+                  predvalues = tl_predvalues_change, i = i, folder = folder_lin_constant)
+  sim_fit_and_res(nsub, t_max, tl_valid, "change", tl_var = t_load_change, fvar = flin, flag = wdecay,
+                  predvalues = tl_predvalues_change, i = i, folder = folder_lin_decay)
+  sim_fit_and_res(nsub, t_max, tl_valid, "change", tl_var = t_load_change, fvar = flin, flag = wexponential_decay,
+                  predvalues = tl_predvalues_change, i = i, folder = folder_lin_exponential_decay)
 }
 
 #-----------------------Option: multiple cores
@@ -430,8 +429,8 @@ set.seed(1234)
 numCores = 4
 registerDoParallel(numCores)
 
-startsim = 1
-nsim = 4
+startsim = 43
+nsim = 1900
 seqsim = startsim:nsim
 
 options(warn=-1)
