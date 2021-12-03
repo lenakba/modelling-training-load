@@ -136,7 +136,7 @@ ggarrange(rmse_plot_amount, rmse_plot_change, ncol = 1, labels = c("Amount", "Ch
 rmse_plot(d_perf_directionflip, rmse, xlab = "External RMSE")
 rmse_plot(d_perf_params_change, aic, xlab = "AIC") + facet_wrap(~relationship, scales = "free")
 
-############################################### Rank #########################################################
+############################################### Mosaic Rank #########################################################
 
 # how many % rank for each rep?
 d_per_rep_amount = d_res_amount %>% distinct(relationship, method, rep, rmse, aic) %>% arrange(rep, relationship, method) %>% 
@@ -171,38 +171,57 @@ d_rank_change_aic = calc_prop_wins(d_per_rep_change, aic) %>% mutate(relationshi
                                                                                               relationship == "Decay" ~ "E Decay",
                                                                                               relationship == "Exponential Decay" ~ "F Exponential Decay"))
 
-# rank 1 is best
-
-rank_plot = function(d, parameter_name){
-
-  ggplot(d %>% filter(rank == 1), aes(x = prop, y = method_fac)) +
-    ggstance::geom_barh(stat = "identity", fill = nih_distinct[4]) +
-    facet_wrap(~relationship, ncol = 3) +
-    theme_barh(text_size) + 
-    scale_x_continuous(limits = c(0, 1.0), labels = axis_percent, expand = expand_bar) +
-    scale_y_discrete(drop=F) +
-    xlab(paste0("Percentage Rank 1 (", parameter_name, ")")) +
-    ylab(NULL) + 
-    theme(axis.line = element_line(color = nih_distinct[4]),
-          axis.ticks = element_line(color = nih_distinct[4]),
-          panel.grid = element_blank(),
-          title = element_text(face = "bold", family = "Trebuchet MS"),
-          strip.text.x = element_text(size = text_size, family="Trebuchet MS", colour="black", face = "bold", hjust = -0.01)) 
+# add ranks that are 0%
+add_zero_ranks = function(d){
+  
+  d %>% arrange(rank) %>% 
+    mutate(rank_fac = fct_inorder(factor(rank))) %>% 
+    complete(relationship, method_fac, rank_fac) %>% 
+    mutate(n = ifelse(is.na(n), 0, n),
+           prop = ifelse(is.na(prop), 0, prop))
+  
 }
 
-rank_plot_amount_rmse = rank_plot(d_rank_amount_rmse %>% filter(relationship != "Linear Direction Change"), "External RMSE")
-rank_plot_amoun_aic = rank_plot(d_rank_amount_aic %>% filter(relationship != "Linear Direction Change"), "AIC")
+d_rank_amount_rmse = add_zero_ranks(d_rank_amount_rmse)
+d_rank_amount_aic = add_zero_ranks(d_rank_amount_aic)
+d_rank_change_rmse_residuals = add_zero_ranks(d_rank_change_rmse_residuals)
+d_rank_change_aic = add_zero_ranks(d_rank_change_aic)
+
+nih_yellow = nih_distinct[1]
+nih_brightyellow1 = color_darker(nih_yellow, -10)
+nih_brightyellow2 = color_darker(nih_yellow, -20)
+nih_brightyellow3 = color_darker(nih_yellow, -30)
+
+ordinal_colors = c(nih_brightyellow3, nih_brightyellow2, nih_brightyellow1, nih_yellow) 
+
+rank_plot = function(d){
+  
+  ggplot(d, aes(x = prop, y = method_fac, fill = rank_fac)) +
+    facet_wrap(~relationship, scales = "free", ncol = 3) + 
+    ggstance::geom_colh(color = "black") +
+    scale_fill_manual(values = ordinal_colors) +
+    guides(fill = guide_legend(reverse = TRUE)) +
+    theme_base(text_size) +
+    scale_x_continuous(limits = c(0, 1.0), labels = scales::percent_format(1), expand = expand_bar) +
+    xlab(paste0("% per rank")) +
+    ylab(NULL) +
+    ostrc_theme 
+
+}
+
+rank_plot_amount_rmse = rank_plot(d_rank_amount_rmse %>% filter(relationship != "Linear Direction Change"))
+rank_plot_amoun_aic = rank_plot(d_rank_amount_aic %>% filter(relationship != "Linear Direction Change"))
 ggarrange(rank_plot_amount_rmse, rank_plot_amoun_aic, ncol = 1, labels = c("RMSE", "AIC"))
 
-rank_plot_change_rmse = rank_plot(d_rank_change_rmse_residuals, "Internal RMSE")
-rank_plot_change_aic = rank_plot(d_rank_change_aic, "AIC")
+rank_plot_change_rmse = rank_plot(d_rank_change_rmse_residuals)
+rank_plot_change_aic = rank_plot(d_rank_change_aic)
 ggarrange(rank_plot_change_rmse, rank_plot_change_aic, ncol = 1, labels = c("RMSE", "AIC"))
 
 # for supplementary
 rank_plot_dirflip_rmse = rank_plot(d_rank_amount_rmse %>% filter(relationship == "Linear Direction Change") %>% 
-                                     mutate(relationship = ifelse(relationship == "Linear Direction Change", "A", "0")), "External RMSE")
+                                     mutate(relationship = ifelse(relationship == "Linear Direction Change", "A", "0")))
 rank_plot_dirflip_aic = rank_plot(d_rank_amount_aic %>% filter(relationship == "Linear Direction Change") %>% 
-  mutate(relationship = ifelse(relationship == "Linear Direction Change", "B", "0")), "AIC")
+                                    mutate(relationship = ifelse(relationship == "Linear Direction Change", "B", "0")))
 ggarrange(rank_plot_dirflip_rmse, rank_plot_dirflip_aic, ncol = 2)
 
 ############################################## DLNM effect at each lag level #################################################################
