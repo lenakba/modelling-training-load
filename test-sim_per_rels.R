@@ -194,14 +194,14 @@ calc_cumeffs_all = function(d_sim_hist, t_load_type = "amount", fvar, flag){
   d_cumeffs
 }
 
-d_cumeff = calc_cumeffs_all(d_sim_tl_hist, t_load_type = "change", flin, wdecay)
+# d_cumeff = calc_cumeffs_all(d_sim_tl_hist, t_load_type = "change", flin, wdecay)
 
 ########################################Simulate injuries based on cumulative effect of training load#####################
 d_cumeff_mat = d_cumeff %>% mutate(day = rep(1:t_max, nsub)) %>% 
                             pivot_wider(names_from = id, values_from = cumeff) %>% select(-day) %>% as.matrix
 
-set.seed(1234)
-d_survival_sim = permalgorithm(nsub, t_max, Xmat = d_cumeff_mat, censorRandom = runif(nsub, 1, t_max*2), betas=1)
+#set.seed(1234)
+#d_survival_sim = permalgorithm(nsub, t_max, Xmat = d_cumeff_mat, censorRandom = runif(nsub, 1, t_max*2), betas=1)
 
 # helper function which simulates survival data from training load values
 # step 1 simulate study with nsub participants with an training load 
@@ -220,7 +220,8 @@ sim_survdata = function(nsub, t_max, tl_values, t_load_type, fvar, flag){
   d_survival_sim
 } 
 set.seed(1234)
-d_survival_sim = sim_survdata(nsub, t_max, tl_valid, t_load_type = "change", fvar = flin, flag = wdecay)
+d_survival_sim_a = sim_survdata(nsub, t_max, tl_valid, t_load_type = "amount", fvar = fj, flag = wdecay)
+d_survival_sim_c = sim_survdata(nsub, t_max, tl_valid, t_load_type = "change", fvar = flin, flag = wdecay)
 
 # estimate common number of events
 set.seed(1234)
@@ -296,12 +297,21 @@ calc_q_matrix = function(d_counting_process, d_tl_hist_wide){
 
 # arrange the exposure history in wide format in a matrix
 # which is neeeded for calculating the q-matrix for the crossbasis
-d_sim_tl_hist_spread_day = 
+
+d_sim_tl_hist_spread_day_a = 
+  d_sim_tl_hist %>% select(-t_load_change) %>% 
+  pivot_wider(names_from = day, values_from = t_load) %>% select(-id) %>% as.matrix
+d_survival_sim_cpform_a = counting_process_form(d_survival_sim_a)
+q_mat_a = calc_q_matrix(d_survival_sim_cpform_a, d_sim_tl_hist_spread_day_a)
+q_mat_same_n_a = q_mat_a %>% as_tibble() %>% mutate(day = as.numeric(rownames(q_mat_a))) %>% 
+  filter(day >= lag_max+1) %>% select(-day) %>% as.matrix
+
+d_sim_tl_hist_spread_day_c = 
   d_sim_tl_hist %>% select(-t_load) %>% 
   pivot_wider(names_from = day, values_from = t_load_change) %>% select(-id) %>% as.matrix
-d_survival_sim_cpform = counting_process_form(d_survival_sim)
-q_mat = calc_q_matrix(d_survival_sim_cpform, d_sim_tl_hist_spread_day)
-q_mat_same_n = q_mat %>% as_tibble() %>% mutate(day = as.numeric(rownames(q_mat))) %>% 
+d_survival_sim_cpform_c = counting_process_form(d_survival_sim_c)
+q_mat_c = calc_q_matrix(d_survival_sim_cpform_c, d_sim_tl_hist_spread_day_c)
+q_mat_same_n_c = q_mat_c %>% as_tibble() %>% mutate(day = as.numeric(rownames(q_mat_c))) %>% 
                filter(day >= lag_max+1) %>% select(-day) %>% as.matrix
 
 ####################################### Modify training load with different methods ####################################
@@ -361,14 +371,14 @@ d_sim_hist_ewma = function_on_list(d_sim_tl_hist, ewma, lag_max+1) %>% rename(ew
 d_sim_hist_redi = function_on_list(d_sim_tl_hist, redi, lag_max+1) %>% rename(redi_t_load = data)
 
 # calc rolling average and ewma on training load amount
-d_survival_sim_cpform_mods = d_survival_sim_cpform %>% filter(exit >= lag_max+1)
-d_survival_sim_cpform_mods = d_survival_sim_cpform_mods %>% left_join(d_sim_hist_ra, by = c("id", "exit" = "day"))
-d_survival_sim_cpform_mods = d_survival_sim_cpform_mods %>% left_join(d_sim_hist_ewma, by = c("id", "exit" = "day"))
-d_survival_sim_cpform_mods = d_survival_sim_cpform_mods %>% left_join(d_sim_hist_redi, by = c("id", "exit" = "day"))
-ob_ra = onebasis(d_survival_sim_cpform_mods$ra_t_load, "poly", degree = 2)
-ob_ewma = onebasis(d_survival_sim_cpform_mods$ewma_t_load, "poly", degree = 2)
-ob_redi = onebasis(d_survival_sim_cpform_mods$redi_t_load, "poly", degree = 2)
-cb_dlnm = crossbasis(q_mat_same_n, lag=c(lag_min, lag_max), 
+d_survival_sim_cpform_mods_a = d_survival_sim_cpform_a %>% filter(exit >= lag_max+1)
+d_survival_sim_cpform_mods_a = d_survival_sim_cpform_mods_a %>% left_join(d_sim_hist_ra, by = c("id", "exit" = "day"))
+d_survival_sim_cpform_mods_a = d_survival_sim_cpform_mods_a %>% left_join(d_sim_hist_ewma, by = c("id", "exit" = "day"))
+d_survival_sim_cpform_mods_a = d_survival_sim_cpform_mods_a %>% left_join(d_sim_hist_redi, by = c("id", "exit" = "day"))
+ob_ra = onebasis(d_survival_sim_cpform_mods_a$ra_t_load, "poly", degree = 2)
+ob_ewma = onebasis(d_survival_sim_cpform_mods_a$ewma_t_load, "poly", degree = 2)
+ob_redi = onebasis(d_survival_sim_cpform_mods_a$redi_t_load, "poly", degree = 2)
+cb_dlnm = crossbasis(q_mat_same_n_a, lag=c(lag_min, lag_max), 
                      argvar = list(fun="poly", degree = 2),
                      arglag = list(fun="ns", knots = 3))
 
@@ -417,17 +427,17 @@ d_sim_hist_weekly = d_sim_hist_weekly %>%
   filter(!is.na(day)) %>% ungroup()
 
 # couple survival data with change in load data
-d_survival_sim_cpform_mods = d_survival_sim_cpform %>% filter(exit >= lag_max+1)
+d_survival_sim_cpform_mods_c = d_survival_sim_cpform_c %>% filter(exit >= lag_max+1)
 
-d_survival_sim_cpform_mods = d_survival_sim_cpform_mods %>% 
+d_survival_sim_cpform_mods_c = d_survival_sim_cpform_mods_c %>% 
                              left_join(d_sim_hist_acwr, by = c("id", "exit" = "day"))
 
-d_survival_sim_cpform_mods = d_survival_sim_cpform_mods %>% 
+d_survival_sim_cpform_mods_c = d_survival_sim_cpform_mods_c %>% 
                              left_join(d_sim_hist_weekly, by = c("id", "exit" = "day"))
 
-ob_acwr = onebasis(d_survival_sim_cpform_mods$acwr, "lin")
-ob_weekly_change = onebasis(d_survival_sim_cpform_mods$weekly_change, "lin")
-cb_dlnm_change = crossbasis(q_mat_same_n, lag=c(lag_min, lag_max), 
+ob_acwr = onebasis(d_survival_sim_cpform_mods_c$acwr, "lin")
+ob_weekly_change = onebasis(d_survival_sim_cpform_mods_c$weekly_change, "lin")
+cb_dlnm_change = crossbasis(q_mat_same_n_c, lag=c(lag_min, lag_max), 
                      argvar = list(fun="lin"),
                      arglag = list(fun="ns", knots = 3))
 
@@ -438,17 +448,18 @@ cox_basis = function(d_sim_surv, basis){
   eval_bare(expr(coxph(Surv(enter, exit, event) ~ !!basis, d_sim_surv, y = FALSE, ties = "efron")))
 }
 
-fit_ra = cox_basis(d_survival_sim_cpform_mods, ob_ra)
-fit_ewma = cox_basis(d_survival_sim_cpform_mods, ob_ewma)
-fit_redi = cox_basis(d_survival_sim_cpform_mods, ob_redi)
-fit_dlnm = cox_basis(d_survival_sim_cpform_mods, cb_dlnm)
+fit_ra = cox_basis(d_survival_sim_cpform_mods_a, ob_ra)
+fit_ewma = cox_basis(d_survival_sim_cpform_mods_a, ob_ewma)
+fit_redi = cox_basis(d_survival_sim_cpform_mods_a, ob_redi)
+fit_dlnm_amount = cox_basis(d_survival_sim_cpform_mods_a, cb_dlnm)
 
-fit_acwr = cox_basis(d_survival_sim_cpform_mods, ob_acwr)
-fit_weekly_change = cox_basis(d_survival_sim_cpform_mods, ob_weekly_change)
-fit_dlnm = cox_basis(d_survival_sim_cpform_mods, cb_dlnm_change)
+fit_acwr = cox_basis(d_survival_sim_cpform_mods_c, ob_acwr)
+fit_weekly_change = cox_basis(d_survival_sim_cpform_mods_c, ob_weekly_change)
+fit_dlnm_change = cox_basis(d_survival_sim_cpform_mods_c, cb_dlnm_change)
 
 ################################################## Calculate numeric performance measures ############################
   
+# model fit
 aic_ra = AIC(fit_ra)
 aic_ewma = AIC(fit_ewma)
 aic_redi = AIC(fit_redi)
@@ -462,23 +473,21 @@ aic_dlnm = AIC(fit_dlnm)
 
 anova(fit_acwr, fit_weekly_change, fit_dlnm)
 
+# model predictions
+cp_preds_ra = crosspred(ob_ra, fit_ra, at = tl_predvalues, cen = 600, cumul = TRUE)
+cp_preds_ewma = crosspred(ob_ewma, fit_ewma, at = tl_predvalues, cen = 600, cumul = TRUE)
+cp_preds_dlnm_amount = crosspred(cb_dlnm, fit_dlnm_amount, at = tl_predvalues, cen = 600, cumul = TRUE)
+
 cp_preds_acwr = crosspred(ob_acwr, fit_acwr, at = tl_predvalues_acwr, cumul = TRUE)
 cp_preds_weekly_change = crosspred(ob_weekly_change, fit_weekly_change, at = tl_predvalues_weekly_change, cumul = TRUE)
-cp_preds_dlnm = crosspred(cb_dlnm_change, fit_dlnm, at = tl_predvalues_change, cumul = TRUE)
+cp_preds_dlnm_change = crosspred(cb_dlnm_change, fit_dlnm_change, at = tl_predvalues_change, cumul = TRUE)
 
-# p -values?
-# RMSE for model fit?
+# Internal RMSE for relatice change in load
 sqrt(mean(fit_acwr$residuals^2))
 sqrt(mean(fit_weekly_change$residuals^2))
 sqrt(mean(fit_dlnm$residuals^2))
 
-
 ## compare true coefs vs. predicted coefs
-
-cp_preds_ra = crosspred(ob_ra, fit_ra, at = tl_predvalues, cen = 600, cumul = TRUE)
-cp_preds_ewma = crosspred(ob_ewma, fit_ewma, at = tl_predvalues, cen = 600, cumul = TRUE)
-cp_preds_dlnm = crosspred(cb_dlnm, fit_dlnm, at = tl_predvalues, cen = 600, cumul = TRUE)
-
 true_effect = calc_coefs(tl_predvalues, lag_seq, fjdecay)
 truecumcoefs = rowSums(true_effect)
 
@@ -687,16 +696,71 @@ ggplot(d_cumulative_preds, aes(x = t_load)) +
 
 ######################################################## 3D GRAPHS OF PREDICTED VALUES FOR ASSESSING MODEL FIT
 
+# shared figure options
+text_size = 14
+ostrc_theme =  theme(panel.border = element_blank(), 
+                     panel.background = element_blank(),
+                     panel.grid = element_blank(),
+                     axis.line = element_line(color = nih_distinct[4]),
+                     strip.background = element_blank(),
+                     strip.text.x = element_text(size = text_size, family="Trebuchet MS", colour="black", face = "bold", hjust = -0.01),
+                     axis.ticks = element_line(color = nih_distinct[4]),
+                     legend.position = "bottom")
 
-cp_preds_dlnm = crosspred(cb_dlnm, fit_dlnm, at = tl_predvalues, cen = 600, cumul = TRUE)
 
-# j decay
+
+
+# lag-response curve for sRPE 1000
+spre_fixed = 1000
+rownumber = which(rownames(cp_preds_dlnm_amount$matRRfit)==spre_fixed)
+d_preds_per_lag = as_tibble(cp_preds_dlnm_amount$matRRfit[rownumber,]) %>% 
+                  rename(coef = value) %>% 
+                  mutate(lag = 0:27,
+                         ci_low = cp_preds_dlnm_amount$matRRlow[rownumber,],
+                         ci_high = cp_preds_dlnm_amount$matRRhigh[rownumber,])
+
+plot_dlnm_2d1 = ggplot(d_preds_per_lag, aes(x = lag, y = coef, group = 1)) +
+  geom_line() +
+  geom_ribbon(aes(min = ci_low, max = ci_high), alpha = 0.3, fill = nih_distinct[1]) +
+  theme_base(text_size) +
+  ostrc_theme +
+  xlab("Lag (days)") +
+  ylab("HR for sRPE of 1000") +
+  scale_x_continuous(breaks = scales::breaks_width(3, 0))
+
+# exposure-response curve for lag 0
+lag_fixed = "lag0"
+colnumber = which(colnames(cp_preds_dlnm_amount$matRRfit) == lag_fixed)
+d_preds_per_srpe = as_tibble(cp_preds_dlnm_amount$matRRfit[,colnumber]) %>% 
+                   rename(coef = value) %>% 
+                   mutate(srpe = tl_predvalues,
+                          ci_low = cp_preds_dlnm_amount$matRRlow[,colnumber],
+                          ci_high = cp_preds_dlnm_amount$matRRhigh[,colnumber])
+
+plot_dlnm_2d2 = ggplot(d_preds_per_srpe, aes(x = srpe, y = coef, group = 1)) +
+  geom_line() +
+  geom_ribbon(aes(min = ci_low, max = ci_high), alpha = 0.3, fill = nih_distinct[1]) +
+  theme_base(text_size) +
+  ostrc_theme +
+  xlab("Training load (sRPE)") +
+  ylab("HR on Day 0") +
+  scale_x_continuous(limits = c(0, 1200), breaks = scales::breaks_width(200, 0))
+
+# all plots together.
+
+png("figure7_part1_3d.png", units = "in", width = 10, height = 5, res = 600)
+par(mfrow=c(1,2), mar=c(0.8,0.1,1,0.1), mgp = c(4, 1, 0))
+# 3d plots
 persp(x = tl_predvalues, y = lag_seq, l_coefs[[2]], ticktype="detailed", theta=230, ltheta=150, phi=40, lphi=30,
-      ylab="Lag (Days)", zlab="HR", shade=0.75, r=sqrt(3), d=5,
-      border=grey(0.2), col = nih_distinct[1], xlab = "sRPE")
+      ylab="Lag (Days)", zlab="HR", shade=0.75, r=sqrt(3), d=5, cex.axis=1.0, cex.lab=1.0,
+      border=grey(0.2), col = nih_distinct[1], xlab = "sRPE", main = "A) True relationship")
 
-persp(x = tl_predvalues, y = lag_seq, cp_preds_dlnm$matRRfit, ticktype="detailed", theta=230, ltheta=150, phi=40, lphi=30,
-      ylab="Lag (Days)", zlab="HR", shade=0.75, r=sqrt(3), d=5,
-      border=grey(0.2), col = nih_distinct[1], xlab = "sRPE")
+persp(x = tl_predvalues, y = lag_seq, cp_preds_dlnm_amount$matRRfit, ticktype="detailed", theta=230, ltheta=150, phi=40, lphi=30,
+      ylab="Lag (Days)", zlab="HR", shade=0.75, r=sqrt(3), d=5, cex.axis=1.0, cex.lab=1.0,
+      border=grey(0.2), col = nih_distinct[1], xlab = "sRPE", main = "B) DLNM fit")
+dev.off()
 
+png("figure7_part2_2d.png", units = "in", width = 10, height = 4, res = 600)
+ggpubr::ggarrange(plot_dlnm_2d2, plot_dlnm_2d1, ncol = 2, labels = c("C) DLNM fit per sRPE", "D) DLNM fit per lag"))
+dev.off()
 
