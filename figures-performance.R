@@ -127,9 +127,16 @@ rmse_plot = function(d, x, xlab){
           strip.text.x = element_text(size = text_size, family="Trebuchet MS", colour="black", face = "bold", hjust = -0.01)) 
 }
 
-rmse_plot_amount = rmse_plot(d_perf_amount_3rels, rmse, xlab = "External RMSE") + facet_wrap(~relationship, scales = "free")
-rmse_plot_change = rmse_plot(d_perf_params_change, rmse_residuals, xlab = "Internal RMSE") + facet_wrap(~relationship, scales = "free")
+rmse_plot_amount = rmse_plot(d_perf_amount_3rels, rmse, xlab = "RMSE") + facet_wrap(~relationship, scales = "free")
+aic_plot_amount = rmse_plot(d_perf_amount_3rels %>% mutate(relationship = case_when(relationship == "A Constant" ~ "D Constant",
+                                                                                    relationship == "B Decay" ~ "E Decay",
+                                                                                    relationship == "C Exponential Decay" ~ "F Exponential Decay")), aic, xlab = "AIC") + facet_wrap(~relationship, scales = "free")
 
+cairo_pdf("figure_mean_tlamount.pdf", height = 7, width = 16)
+ggarrange(rmse_plot_amount, aic_plot_amount, ncol = 1, labels = c("RMSE", "AIC"))
+dev.off()
+
+rmse_plot_change = rmse_plot(d_perf_params_change, rmse_residuals, xlab = "Internal RMSE") + facet_wrap(~relationship, scales = "free")
 ggarrange(rmse_plot_amount, rmse_plot_change, ncol = 1, labels = c("Amount", "Change"))
 
 # for supplementary
@@ -211,7 +218,10 @@ rank_plot = function(d){
 
 rank_plot_amount_rmse = rank_plot(d_rank_amount_rmse %>% filter(relationship != "Linear Direction Change"))
 rank_plot_amoun_aic = rank_plot(d_rank_amount_aic %>% filter(relationship != "Linear Direction Change"))
+
+cairo_pdf("figure_ranks_tlamount.pdf", height = 7, width = 16)
 ggarrange(rank_plot_amount_rmse, rank_plot_amoun_aic, ncol = 1, labels = c("RMSE", "AIC"))
+dev.off()
 
 rank_plot_change_rmse = rank_plot(d_rank_change_rmse_residuals)
 rank_plot_change_aic = rank_plot(d_rank_change_aic)
