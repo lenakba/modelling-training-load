@@ -47,52 +47,37 @@ d_res_change = read_delim("simulation_results_change.csv", delim = ";", col_type
 ################################### Amount
 #------------amount, j constant
 files_fits = list.files(path = folder_j_constant)
-n_sim = length(files_fits)/length(file_types) # divide by the number of file types
-l_fits_j_constant = list()
+n_sim = 1900
 d_res_j_constant = data.frame()
 for(i in 1:n_sim){
-  temp_data_fits = readRDS(paste0(folder_j_constant, "fits_",i,"_.rds"))
   temp_data_res = readRDS(paste0(folder_j_constant, "res_",i,"_.rds"))
-  l_fits_j_constant = append(l_fits_j_constant, temp_data_fits)
   d_res_j_constant = rbind(d_res_j_constant, temp_data_res)
 }
 d_res_j_constant = d_res_j_constant %>% mutate(relationship = "Constant")
 
 #------------amount, j decay
 files_fits = list.files(path = folder_j_decay)
-n_sim = length(files_fits)/length(file_types) # divide by the number of file types
-l_fits_j_decay = list()
 d_res_j_decay = data.frame()
 for(i in 1:n_sim){
-  temp_data_fits = readRDS(paste0(folder_j_decay, "fits_",i,"_.rds"))
   temp_data_res = readRDS(paste0(folder_j_decay, "res_",i,"_.rds"))
-  l_fits_j_decay = append(l_fits_j_decay, temp_data_fits)
   d_res_j_decay = rbind(d_res_j_decay, temp_data_res)
 }
 d_res_j_decay = d_res_j_decay %>% mutate(relationship = "Decay")
 
 #------------amount, j exponential decay
 files_fits = list.files(path = folder_j_exponential_decay)
-n_sim = length(files_fits)/length(file_types) # divide by the number of file types
-l_fits_j_exponential_decay = list()
 d_res_j_exponential_decay = data.frame()
 for(i in 1:n_sim){
-  temp_data_fits = readRDS(paste0(folder_j_exponential_decay, "fits_",i,"_.rds"))
   temp_data_res = readRDS(paste0(folder_j_exponential_decay, "res_",i,"_.rds"))
-  l_fits_j_exponential_decay = append(l_fits_j_exponential_decay, temp_data_fits)
   d_res_j_exponential_decay = rbind(d_res_j_exponential_decay, temp_data_res)
 }
 d_res_j_exponential_decay = d_res_j_exponential_decay %>% mutate(relationship = "Exponential Decay")
 
 #------------amount, lin direction_flip
 files_fits = list.files(path = folder_lin_direction_flip)
-n_sim = length(files_fits)/length(file_types) # divide by the number of file types
-l_fits_lin_direction_flip = list()
 d_res_lin_direction_flip = data.frame()
 for(i in 1:n_sim){
-  temp_data_fits = readRDS(paste0(folder_lin_direction_flip, "fits_",i,"_.rds"))
   temp_data_res = readRDS(paste0(folder_lin_direction_flip, "res_",i,"_.rds"))
-  l_fits_lin_direction_flip = append(l_fits_lin_direction_flip, temp_data_fits)
   d_res_lin_direction_flip = rbind(d_res_lin_direction_flip, temp_data_res)
 }
 d_res_lin_direction_flip = d_res_lin_direction_flip %>% mutate(relationship = "Linear Direction Change")
@@ -104,10 +89,8 @@ l_res_amount = list(d_res_j_constant, d_res_j_decay, d_res_j_exponential_decay, 
 
 #------------change, lin constant
 files_fits = list.files(path = folder_lin_constant)
-n_sim = length(files_fits)/length(file_types) # divide by the number of file types
 d_res_lin_constant = data.frame()
 for(i in 1:n_sim){
-  temp_data_fits = readRDS(paste0(folder_lin_constant, "fits_",i,"_.rds"))
   temp_data_res = readRDS(paste0(folder_lin_constant, "res_",i,"_.rds"))
   d_res_lin_constant = rbind(d_res_lin_constant, temp_data_res)
 }
@@ -115,10 +98,8 @@ d_res_lin_constant = d_res_lin_constant %>% mutate(relationship = "Constant")
 
 #------------amount, lin decay
 files_fits = list.files(path = folder_lin_decay)
-n_sim = length(files_fits)/length(file_types) # divide by the number of file types
 d_res_lin_decay = data.frame()
 for(i in 1:n_sim){
-  temp_data_fits = readRDS(paste0(folder_lin_decay, "fits_",i,"_.rds"))
   temp_data_res = readRDS(paste0(folder_lin_decay, "res_",i,"_.rds"))
   d_res_lin_decay = rbind(d_res_lin_decay, temp_data_res)
 }
@@ -126,10 +107,8 @@ d_res_lin_decay = d_res_lin_decay %>% mutate(relationship = "Decay")
 
 #------------amount, lin exponential decay
 files_fits = list.files(path = folder_lin_exponential_decay)
-n_sim = length(files_fits)/length(file_types) # divide by the number of file types
 d_res_lin_exponential_decay = data.frame()
 for(i in 1:n_sim){
-  temp_data_fits = readRDS(paste0(folder_lin_exponential_decay, "fits_",i,"_.rds"))
   temp_data_res = readRDS(paste0(folder_lin_exponential_decay, "res_",i,"_.rds"))
   d_res_lin_exponential_decay = rbind(d_res_lin_exponential_decay, temp_data_res)
 }
