@@ -61,10 +61,10 @@ preds_plot = function(d, x, xlab, compare = TRUE){
   
   plot = ggplot(d, aes(x = !!x))
     if(compare){
-      plot = plot + geom_line(data = d, aes(y = true_cumul_coefs, color = "True relationship"), size = 0.5)   
+      plot = plot + geom_line(data = d, aes(y = true_cumul_coefs, color = "True relationship"), size = 0.75)   
     }
   plot = plot + geom_ribbon(aes(min = ci_low, max = ci_high), alpha = 0.3, fill = nih_distinct[1]) + 
-    geom_line(aes(y = cumul, color = "Estimation"), size = 0.5) +
+    geom_line(aes(y = cumul, color = "Estimation"), size = 0.75) +
     scale_color_manual(values = c(nih_distinct[1], "Black")) + 
     ylab("Cumulative Hazard") +
     xlab(xlab) +
@@ -73,19 +73,29 @@ preds_plot = function(d, x, xlab, compare = TRUE){
   plot
 }
 
+cairo_pdf("figure3_est_vs_true_amount.pdf", height = 11, width = 14)
 preds_plot(d_amount_3rels, t_load, "sRPE (AU) on Day 0")  +
   facet_wrap(c("relationship", "method_fac"), ncol = 4, scales = "free") +
-  scale_y_continuous(limit = c(-15, 20), breaks = scales::breaks_width(5)) 
+  scale_y_continuous(limit = c(-8, 20), breaks = scales::breaks_width(5)) +
+  scale_x_continuous(limit = c(NA, 1250), breaks = scales::breaks_width(200)) 
+dev.off()
 
+cairo_pdf("sup_figureS3_est_vs_true_directionflip.pdf", height = 6, width = 10)
 preds_plot(d_directionflip, t_load, "sRPE (AU) on Day 0") + 
-  facet_wrap(~method_fac, ncol = 2, scales = "free") 
+  facet_wrap(~method_fac, ncol = 2, scales = "free") +
+  scale_y_continuous(limit = c(-40, 20)) +
+  scale_x_continuous(limit = c(NA, 1250), breaks = scales::breaks_width(200))
+dev.off()
 
 ############################################### Predicted values (change only) ###############################################
 d_change_1rep = d_res_change %>% filter(rep == 1)
 d_change_long = d_change_1rep %>% pivot_longer(cols = c(t_load_acwr, t_load_weekly_change, t_load_change), values_to = "t_load_relative")
+
+cairo_pdf("figure4_est_vs_true_change.pdf", height = 8, width = 14)
 preds_plot(d_change_long, t_load_relative, "Relative change in sRPE (AU) on Day 0", compare = TRUE) +
   facet_wrap(c("relationship", "method_fac"), ncol = 3, scales = "free") +
   theme(legend.position = "none")
+dev.off()
 
 ############################################## Dotplot ranking figures (RMSE, AIC) ###########################################################################
 
@@ -104,13 +114,14 @@ names_arrange_change = c("DLNM %Δ", "Week-to-week %Δ", "ACWR")
 d_perf_params_change = d_res_change %>% group_by(relationship, method) %>% 
                        summarise_at(vars(all_of(perf_internal)), mean)  %>% 
                        mutate(method_fac = factor(method, levels = names_arrange_change, labels = names_arrange_change))
-d_perf_params_change = d_perf_params_change %>% mutate(relationship = case_when(relationship == "Constant" ~ "D Constant",
-                                                                                relationship == "Decay" ~ "E Decay",
-                                                                                relationship == "Exponential Decay" ~ "F Exponential Decay"))
+d_perf_params_change = d_perf_params_change %>% mutate(relationship = case_when(relationship == "Constant" ~ "A Constant",
+                                                                                relationship == "Decay" ~ "B Decay",
+                                                                                relationship == "Exponential Decay" ~ "C Exponential Decay"))
 
 d_perf_amount_3rels = d_perf_params_amount %>% filter(relationship != "Linear Direction Change")
 d_perf_directionflip = d_perf_params_amount %>% filter(relationship == "Linear Direction Change")
 
+text_size = 16
 rmse_plot = function(d, x, xlab){
   x = enquo(x)
 
@@ -128,19 +139,37 @@ rmse_plot = function(d, x, xlab){
           strip.text.x = element_text(size = text_size, family="Trebuchet MS", colour="black", face = "bold", hjust = -0.01)) 
 }
 
-rmse_plot_amount = rmse_plot(d_perf_amount_3rels, rmse, xlab = "RMSE") + facet_wrap(~relationship, scales = "free")
-aic_plot_amount = rmse_plot(d_perf_amount_3rels %>% mutate(relationship = case_when(relationship == "A Constant" ~ "D Constant",
-                                                                                    relationship == "B Decay" ~ "E Decay",
-                                                                                    relationship == "C Exponential Decay" ~ "F Exponential Decay")), aic, xlab = "AIC") + facet_wrap(~relationship, scales = "free")
+# amount
+rmse_plot_amount = rmse_plot(d_perf_amount_3rels, rmse, xlab = "Mean RMSE") + facet_wrap(~relationship, scales = "free")
+aic_plot_amount = rmse_plot(d_perf_amount_3rels %>% 
+                            mutate(relationship = case_when(relationship == "A Constant" ~ "D Constant",
+                                                            relationship == "B Decay" ~ "E Decay",
+                                                            relationship == "C Exponential Decay" ~ "F Exponential Decay")), 
+                  aic, 
+                  xlab = "Mean AIC") + 
+                  facet_wrap(~relationship, scales = "free") +
+  scale_x_continuous(limits = c(NA, 1428))
 
-cairo_pdf("figure_mean_tlamount.pdf", height = 7, width = 16)
+cairo_pdf("sup_figureS4_rmse_and_aic_amount.pdf", height = 7, width = 16)
 ggarrange(rmse_plot_amount, aic_plot_amount, ncol = 1, labels = c("RMSE", "AIC"))
 dev.off()
 
-rmse_plot_change = rmse_plot(d_perf_params_change, rmse_residuals, xlab = "Internal RMSE") + facet_wrap(~relationship, scales = "free")
-ggarrange(rmse_plot_amount, rmse_plot_change, ncol = 1, labels = c("Amount", "Change"))
+# change
+rmse_plot_change = rmse_plot(d_perf_params_change, rmse_residuals, xlab = "Mean RMSE") + facet_wrap(~relationship, scales = "free") +
+  scale_x_continuous(limits = c(NA, 0.11371))
+aic_plot_change = rmse_plot(d_perf_params_change %>% 
+                            mutate(relationship = case_when(relationship == "A Constant" ~ "D Constant",
+                                                            relationship == "B Decay" ~ "E Decay",
+                                                            relationship == "C Exponential Decay" ~ "F Exponential Decay")), 
+                  aic, 
+                  xlab = "Mean AIC") + 
+                  facet_wrap(~relationship, scales = "free")
 
-# for supplementary
+cairo_pdf("sup_figureS5_rmse_and_aic_change.pdf", height = 7, width = 16)
+ggarrange(rmse_plot_change, aic_plot_change, ncol = 1, labels = c("RMSE", "AIC"))
+dev.off()
+
+# for supplementary?
 rmse_plot(d_perf_directionflip, rmse, xlab = "External RMSE")
 rmse_plot(d_perf_params_change, aic, xlab = "AIC") + facet_wrap(~relationship, scales = "free")
 
@@ -255,3 +284,13 @@ persp(x = tl_predvalues, y = lag_seq, const_coefs, ticktype="detailed", theta=23
 persp(x = tl_predvalues, y = lag_seq, cp_preds_dlnm$matRRfit, ticktype="detailed", theta=230, ltheta=150, phi=40, lphi=30,
       ylab="Lag (Days)", zlab="HR", shade=0.75, r=sqrt(3), d=5,
       border=grey(0.2), col = nih_distinct[1], xlab = "sRPE")
+
+############################################# Table of Results ############################################################################
+perf_internal = c("aic", "rmse_residuals", "aw") # variables in both amount and change
+perf_external = c("rmse", "coverage") # variables in amount only
+
+# calc mean across simulations
+d_perf_params_amount = d_res_amount %>% group_by(relationship, method) %>% summarise_at(vars(all_of(perf_internal), all_of(perf_external), starts_with("mcse")), mean)
+d_perf_params_change = d_res_change %>% group_by(relationship, method) %>% summarise_at(vars(all_of(perf_internal)), mean)
+
+
