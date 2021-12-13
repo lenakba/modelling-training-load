@@ -123,6 +123,7 @@ rmse_plot = function(d, x, xlab){
           axis.ticks = element_line(color = nih_distinct[4]),
           panel.border = element_blank(), 
           panel.background = element_blank(),
+          panel.grid.major=element_line(color = "#e4e0da"),
           title = element_text(face = "bold", family = "Trebuchet MS"),
           strip.text.x = element_text(size = text_size, family="Trebuchet MS", colour="black", face = "bold", hjust = -0.01)) 
 }
