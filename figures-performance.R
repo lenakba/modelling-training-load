@@ -219,10 +219,10 @@ add_zero_ranks = function(d){
   
 }
 
-d_rank_amount_rmse = add_zero_ranks(d_rank_amount_rmse)
-d_rank_amount_aic = add_zero_ranks(d_rank_amount_aic)
-d_rank_change_rmse_residuals = add_zero_ranks(d_rank_change_rmse_residuals)
-d_rank_change_aic = add_zero_ranks(d_rank_change_aic)
+d_rank_amount_rmse = add_zero_ranks(d_rank_amount_rmse) %>% mutate(metric = "RMSE")
+d_rank_amount_aic = add_zero_ranks(d_rank_amount_aic) %>% mutate(metric = "AIC")
+d_rank_change_rmse_residuals = add_zero_ranks(d_rank_change_rmse_residuals) %>% mutate(metric = "RMSE")
+d_rank_change_aic = add_zero_ranks(d_rank_change_aic) %>% mutate(metric = "AIC")
 
 nih_yellow = nih_distinct[1]
 nih_brightyellow1 = color_darker(nih_yellow, -10)
@@ -264,6 +264,20 @@ rank_plot_dirflip_aic = rank_plot(d_rank_amount_aic %>% filter(relationship == "
                                     mutate(relationship = ifelse(relationship == "Linear Direction Change", "B", "0")))
 ggarrange(rank_plot_dirflip_rmse, rank_plot_dirflip_aic, ncol = 2)
 
+################################################ Table instead of rank plot ####################################################
+
+d_rank_amount_rmse_wide = d_rank_amount_rmse %>% select(-rank) %>% mutate(prop = round(prop*100, 1)) %>%  pivot_wider(., names_from = "method_fac", values_from = c("prop", "n")) 
+d_rank_amount_aic_wide = d_rank_amount_aic %>% select(-rank) %>% mutate(prop = round(prop*100, 1)) %>%  pivot_wider(., names_from = "method_fac", values_from = c("prop", "n")) 
+
+d_rank_change_rmse_wide = d_rank_change_rmse_residuals %>% select(-rank) %>% mutate(prop = round(prop*100, 1)) %>%  pivot_wider(., names_from = "method_fac", values_from = c("prop", "n")) 
+d_rank_change_aic_wide = d_rank_change_aic %>% select(-rank) %>% mutate(prop = round(prop*100, 1)) %>%  pivot_wider(., names_from = "method_fac", values_from = c("prop", "n")) 
+
+d_ranks_amount_wide = bind_rows(d_rank_amount_rmse_wide, d_rank_amount_aic_wide) 
+d_ranks_change_wide = bind_rows(d_rank_change_rmse_wide, d_rank_change_aic_wide)
+
+# write_excel_csv(d_ranks_amount_wide, "sup_tableS2_amount.csv", delim = ";", na = "")
+# write_excel_csv(d_ranks_change_wide, "sup_tableS3_change.csv", delim = ";", na = "")
+
 ############################################## DLNM effect at each lag level #################################################################
 
 # lag set at 4 weeks (28) as is often used in tl studies
@@ -290,7 +304,15 @@ perf_internal = c("aic", "rmse_residuals", "aw") # variables in both amount and 
 perf_external = c("rmse", "coverage") # variables in amount only
 
 # calc mean across simulations
-d_perf_params_amount = d_res_amount %>% group_by(relationship, method) %>% summarise_at(vars(all_of(perf_internal), all_of(perf_external), starts_with("mcse")), mean)
-d_perf_params_change = d_res_change %>% group_by(relationship, method) %>% summarise_at(vars(all_of(perf_internal)), mean)
+d_perf_params_amount = d_res_amount %>% 
+                       group_by(relationship, method) %>% 
+                       summarise_at(vars(all_of(perf_internal), all_of(perf_external), starts_with("mcse")), mean)
+
+d_perf_params_change = d_res_change %>% 
+                       group_by(relationship, method) %>% 
+                       summarise_at(vars(all_of(perf_internal)), mean)
+
+# write_excel_csv(d_perf_params_amount, "table1_amount.csv", delim = ";", na = "")
+# write_excel_csv(d_perf_params_change, "table2_change.csv", delim = ";", na = "")
 
 
