@@ -18,6 +18,12 @@ symmetrized_change = function(x, y){
   100*((x - y)/(x + y))
 }
 
+# find the min and max lag
+# lag set at 4 weeks (28) as is often used in tl studies
+# since the first day is day 0, the 28th day is day 27
+lag_min = 0
+lag_max = 27
+
 # loading imputed datasets
 folder_handball = paste0("O:\\Prosjekter\\Bache-Mathiesen-Biostatistikk\\Data\\handball\\") # location of handball data
 l_handball = readRDS(paste0(folder_handball,"handball_imputed.RDS"))
@@ -85,11 +91,7 @@ l_tl_hist = l_surv %>% map(. %>% group_by(Id) %>% ungroup() %>% select(Id, load,
 l_tl_hist_spread_day = 
   l_tl_hist %>% map(. %>% pivot_wider(names_from = Stop, values_from = load) %>% select(-Id) %>% as.matrix)
 
-# find the min and max lag
-# lag set at 4 weeks (28) as is often used in tl studies
-# since the first day is day 0, the 28th day is day 27
-lag_min = 0
-lag_max = 27
+
 
 # calc Q matrices
 l_q_mat = map2(.x = l_surv_cpform,
@@ -103,244 +105,124 @@ l_surv_cpform = l_surv_cpform %>% map(. %>% mutate(id = as.character(id)) %>% as
 # make the crossbasis
 l_cb_dlnm = l_q_mat %>% map(~crossbasis(., lag=c(lag_min, lag_max), 
                                         argvar = list(fun="ns", knots = 3),
-                                        arglag = list(fun="ns", knots = 3)))
+                                        arglag = list(fun="lin")))
 
 # fit DLNM
 l_fit_dlnm = map2(.x = l_surv_cpform,
                   .y = l_cb_dlnm,
-                  ~coxph(Surv(enter, exit, event) ~ .y + sex + age, .x, y = FALSE, ties = "efron"))
+                  ~coxph(Surv(enter, exit, event) ~ .y + sex + age + 
+                           frailty.gaussian(id), .x, y = FALSE, ties = "efron"))
 
-l_fit_dlnm %>% pool()
+summary(l_fit_dlnm %>% pool())
 
+#################################################### Figures for exploring effects
 
-library(parfm)
-# b) We then fit a model with Weibull baseline and gamma frailty:
-fit_frailty = parfm(Surv(enter, exit, event)~factor(trt), cluster="id", frailty="gamma", data=eye)
+# vector of tl values used in visualizations of predictions
+predvalues = seq(min(l_handball[[1]]$load), max(l_handball[[1]]$load), 100)
+spre_fixed = 3000
+lag_fixed = "lag0"
+lag_seq = lag_min:lag_max 
 
-l_fit_dlnm = map2(.x = l_surv_cpform,
-                  .y = l_cb_dlnm,
-                  ~parfm(Surv(enter, exit, event) ~ .y, cluster="id", frailty="gamma", data = .x))
-exp(-0.960)
-?Surv
-########################################## Time to first injury below
+# predict hazards
+l_cp_preds_dlnm = 
+  map2(.x = l_fit_dlnm,
+     .y = l_cb_dlnm,
+     ~crosspred(.y, .x, at = predvalues, cen = spre_fixed, cumul = TRUE))
 
-# calc follow up time for those with and without an injury event
-l_daystoinjury = l_handball_nomissing %>% map(. %>% filter(injury == 1) %>% group_by(p_id) %>% distinct(injury, .keep_all = TRUE) %>% rename(Fup = day))
-l_daystocensor = l_handball_nomissing %>% map(. %>% group_by(p_id) %>% mutate(n_inj = sum(injury)) %>% filter(n_inj == 0) %>% mutate(Fup = max(day)) %>% distinct(Fup, .keep_all = TRUE) %>% select(-n_inj, -day))
+# function for plucking the right matrix out of the crosspred list within the list of crosspred lists
+pluck_mat = function(x, pos){pluck(l_cp_preds_dlnm, x, pos)}
+# 13 is matRRfit
+matRRfit = 13
+d_preds1 = pluck_mat(1, matRRfit)
+d_preds2 = pluck_mat(2, matRRfit)
+d_preds3 = pluck_mat(3, matRRfit)
+d_preds4 = pluck_mat(4, matRRfit)
+d_preds5 = pluck_mat(5, matRRfit)
+l_matRRfit = list(d_preds1, d_preds2, d_preds3, d_preds4, d_preds5)
+# average across preds
+mat_matRRfit = reduce(l_matRRfit, `+`) / length(l_matRRfit)
 
-l_fup = map2(.x = l_daystoinjury,
-     .y = l_daystocensor,
-     ~bind_rows(.x, .y))
+# conflow
+matRRfit_low = 14
+d_preds_low1 = pluck_mat(1, matRRfit_low)
+d_preds_low2 = pluck_mat(2, matRRfit_low)
+d_preds_low3 = pluck_mat(3, matRRfit_low)
+d_preds_low4 = pluck_mat(4, matRRfit_low)
+d_preds_low5 = pluck_mat(5, matRRfit_low)
+l_matRRfit_low = list(d_preds_low1, d_preds_low2, d_preds_low3, d_preds_low4, d_preds_low5)
+# average across preds
+mat_matRRfit_low = reduce(l_matRRfit_low, `+`) / length(l_matRRfit_low)
 
-l_fup = l_fup %>% map(. %>% select(p_id, Fup))
+# confhigh
+matRRfit_high = 15
+d_preds_high1 = pluck_mat(1, matRRfit_high)
+d_preds_high2 = pluck_mat(2, matRRfit_high)
+d_preds_high3 = pluck_mat(3, matRRfit_high)
+d_preds_high4 = pluck_mat(4, matRRfit_high)
+d_preds_high5 = pluck_mat(5, matRRfit_high)
+l_matRRfit_high = list(d_preds_high1, d_preds_high2, d_preds_high3, d_preds_high4, d_preds_high5)
+# average across preds
+mat_matRRfit_high = reduce(l_matRRfit_high, `+`) / length(l_matRRfit_high)
 
-# format data with start and stop times
-l_surv_lim = map2(.x = l_handball_nomissing,
-              .y = l_fup,
-              ~left_join(.x, .y, by = "p_id"))
+# lag-response curve for sRPE 3000
+rownumber = which(rownames(mat_matRRfit)==spre_fixed)
+d_preds_per_lag = as_tibble(mat_matRRfit[rownumber,]) %>% 
+  rename(coef = value) %>% 
+  mutate(lag = 0:27,
+         ci_low = mat_matRRfit_low[rownumber,],
+         ci_high = mat_matRRfit_high[rownumber,])
 
-l_surv = l_surv_lim %>% map(. %>% group_by(p_id) %>% 
-                          filter(day <= Fup) %>% 
-                          rename(Stop = day, Id = p_id, Event = injury) %>% 
-                          mutate(Start = lag(Stop),
-                          Start = ifelse(is.na(Start), 0, Start)) %>% ungroup())
+########## create figure
+library(lmisc)
+# shared figure options
+text_size = 14
+ostrc_theme =  theme(panel.border = element_blank(), 
+                     panel.background = element_blank(),
+                     panel.grid = element_blank(),
+                     axis.line = element_line(color = nih_distinct[4]),
+                     strip.background = element_blank(),
+                     strip.text.x = element_text(size = text_size, family="Trebuchet MS", colour="black", face = "bold", hjust = -0.01),
+                     axis.ticks = element_line(color = nih_distinct[4]),
+                     legend.position = "bottom")
 
-# rearrange to counting process form to calculate the Q matrix
-l_surv_cpform = l_surv %>% map(~counting_process_form(.) %>% mutate(id = as.numeric(id)))
+plot_dlnm_2d1 = ggplot(d_preds_per_lag, aes(x = lag, y = coef, group = 1)) +
+  geom_line() +
+  geom_ribbon(aes(min = ci_low, max = ci_high), alpha = 0.3, fill = nih_distinct[1]) +
+  theme_base(text_size) +
+  ostrc_theme +
+  xlab("Lag (days)") +
+  ylab("HR for sRPE of 1000") +
+  scale_x_continuous(breaks = scales::breaks_width(3, 0))
 
-# arrange the exposure history  in wide format in a matrix
-l_tl_hist = l_surv_lim %>% map(. %>% group_by(p_id) %>% 
-                      filter(day <= Fup) %>% ungroup() %>% select(p_id, load, day))
+# exposure-response curve for lag 0
+colnumber = which(colnames(mat_matRRfit) == lag_fixed)
+d_preds_per_srpe = as_tibble(mat_matRRfit[,colnumber]) %>% 
+  rename(coef = value) %>% 
+  mutate(srpe = tl_predvalues,
+         ci_low = mat_matRRfit_low[,colnumber],
+         ci_high = mat_matRRfit_high[,colnumber])
 
-# arrange the exposure history in wide format in a matrix
-l_tl_hist_spread_day = 
-  l_tl_hist %>% map(. %>% pivot_wider(names_from = day, values_from = load) %>% select(-p_id) %>% as.matrix)
-
-# find the min and max lag
-# lag set at 4 weeks (28) as is often used in tl studies
-# since the first day is day 0, the 28th day is day 27
-lag_min = 0
-lag_max = 27
-
-# calc Q matrices
-l_q_mat = map2(.x = l_surv_cpform,
-             .y = l_tl_hist_spread_day, 
-             ~calc_q_matrix(.x, .y))
-
-# make the crossbasis
-l_cb_dlnm = l_q_mat %>% map(~crossbasis(., lag=c(lag_min, lag_max), 
-                     argvar = list(fun="poly", degree = 2),
-                     arglag = list(fun="ns", knots = 3)))
-
-# if we do not use the whole data, we only have 12 injuries
-# fit DLNM
-l_fit_dlnm = map2(.x = l_surv_cpform,
-                  .y = l_cb_dlnm,
-                  ~coxph(Surv(enter, exit, event) ~ .y, .x, y = FALSE, ties = "efron"))
-
-l_fit_dlnm %>% pool()
-
-
-
-# Function for calculating rolling averages on a chooseable number of days
-# Based on rollapplyr, not rollmean, as rollmean will only start calculating averages
-# at n values, while rollapplyr allows the user to decide preliminary values.
-ra = function(x, n_days = lag_max+1, window = TRUE, ...){
-  zoo::rollapplyr(x, n_days, mean, partial = TRUE)
-}
-
-# function for calculating exponentially waited moving averages
-# using similar syntax as the RA-function
-# wilder=FALSE (the default) uses an exponential smoothing ratio of 2/(n+1)
-# same as in williams et al. 2016
-ewma = function(x, n_days = lag_max+1){
-  TTR::EMA(x, n = n_days, wilder = FALSE)
-}
-
-# robust exponential decreasing index (REDI)
-# for details, see: http://dx.doi.org/10.1136/bmjsem-2019-000573
-redi = function(x, n_days = lag_max+1, lag = lag_seq, lambda = 0.1){
-  lambda = lambda
-  lag_effect = exp((-lambda)*lag)
-  t_max = length(x)
-  vec = n_days:t_max
-  for(i in 1:(t_max-(n_days-1))){
-    tl = lead(x, i-1)[1:n_days]
-    vec[i] = sum(lag_effect*tl)/sum(lag_effect)
-  }
-  vec 
-}
-
-# calculate 7:28 coupled ACWR (this becomes, in theory, a measure of change)
-# use equation in Lolli et al. 2017, most common in football studies Wang et al. 2021.
-slide_sum = function(x){
-  l = slide(x, ~sum(.), .before = 6, step = 1, .complete =TRUE)
-  l = compact(l)
-  l = unlist(l)
-  l
-}
-
-slide_chronic = function(x){
-  l = slide(x, ~sum(.), .before = lag_max, step = 1, .complete =TRUE) %>% map(~./4)
-  l = compact(l)
-  l = unlist(l)
-  l
-}
-
-# function to nest the exposure history data by each individual, 
-# and run a user-specified function on each of their datasets in the list
-function_on_list = function(d_sim_hist, FUN = NULL, day_start){
-  nested_list = d_sim_hist %>% group_by(p_id) %>% nest()
-  nested_list$data = nested_list$data %>% map(., ~FUN(.$load))
-  l_unnest = unnest(nested_list, cols = data) %>% ungroup() %>% 
-    filter(!is.na(data))
-  l_unnest
-}
-
-# rolling average
-l_hist_ra = l_tl_hist %>% map(. %>% function_on_list(., ra, lag_max+1) %>% rename(ra_t_load = data, id = p_id) %>% group_by(id) %>% mutate(day = 1:n()) %>% ungroup)
-l_surv_cpform = l_surv_cpform %>% map(. %>% mutate(id = as.character(id)))
-l_surv_cpform_mods = map2(.x = l_hist_ra,
-     .y = l_surv_cpform,
-     ~left_join(.y, .x, by = c("id", "exit" = "day")))
-
-l_ob_ra = l_surv_cpform_mods %>% map(~onebasis(.$ra_t_load, "poly", degree = 2))                                    
-l_fit_ra = map2(.x = l_surv_cpform_mods,
-                  .y = l_ob_ra,
-                  ~coxph(Surv(enter, exit, event) ~ .y, .x, y = FALSE, ties = "efron"))
-
-# redi
-lag_seq = lag_min:lag_max
-d_sim_hist_redi = l_tl_hist %>% map(. %>% function_on_list(., redi, lag_max+1) %>% rename(redi_t_load = data))
+plot_dlnm_2d2 = ggplot(d_preds_per_srpe, aes(x = srpe, y = coef, group = 1)) +
+  geom_line() +
+  geom_ribbon(aes(min = ci_low, max = ci_high), alpha = 0.3, fill = nih_distinct[1]) +
+  theme_base(text_size) +
+  ostrc_theme +
+  xlab("Training load (sRPE)") +
+  ylab("HR on Day 0") +
+  scale_x_continuous(limits = c(0, 1200), breaks = scales::breaks_width(200, 0))
 
 
-l_tl_hist[[1]]
+# 3D fig
 
-function_on_list(l_tl_hist[[1]], redi, lag_max+1)
+png("figure7_part1_3d.png", units = "in", width = 10, height = 5, res = 600)
+par(mfrow=c(1,2), mar=c(0.8,0.1,1,0.1), mgp = c(4, 1, 0))
+# 3d plots
 
+persp(x = predvalues, y = lag_seq, mat_matRRfit, ticktype="detailed", theta=230, ltheta=150, phi=40, lphi=30,
+      ylab="Lag (Days)", zlab="HR", shade=0.75, r=sqrt(3), d=5, cex.axis=1.0, cex.lab=1.0,
+      border=grey(0.2), col = nih_distinct[1], xlab = "sRPE", main = "A Effect plane")
+dev.off()
 
-d_sim_hist_ewma = l_tl_hist %>% map(. %>% function_on_list(., ewma, lag_max+1) %>% rename(ewma_t_load = data))
-
-
-d_survival_sim_cpform_mods_a = d_survival_sim_cpform_mods_a %>% left_join(d_sim_hist_ra, by = c("id", "exit" = "day"))
-d_survival_sim_cpform_mods_a = d_survival_sim_cpform_mods_a %>% left_join(d_sim_hist_ewma, by = c("id", "exit" = "day"))
-d_survival_sim_cpform_mods_a = d_survival_sim_cpform_mods_a %>% left_join(d_sim_hist_redi, by = c("id", "exit" = "day"))
-
-ob_ewma = onebasis(d_survival_sim_cpform_mods_a$ewma_t_load, "poly", degree = 2)
-ob_redi = onebasis(d_survival_sim_cpform_mods_a$redi_t_load, "poly", degree = 2)
-
-
-# make sure sex is treated as categorical
-# we also create it as a dummy variable 0 = female, 1 = male
-l_handball = l_handball %>% map(. %>% mutate(sex_fac = factor(sex)))
-
-d_survival_sim_cpform = counting_process_form(d_survival_sim)
-q_mat = calc_q_matrix(d_survival_sim_cpform, d_sim_tl_hist_spread_day)
-
-
-
-
-l_fit_dlnm %>% map(~AIC(.))
-l_fit_ra %>% map(~AIC(.))
-
-
-####################--------------------------------Frailty?--------------------------------------------
-
-l_surv = l_handball_nomissing %>% map(. %>% group_by(p_id) %>% 
-                               rename(Stop = day, Id = p_id, Event = injury) %>% 
-                               mutate(Start = lag(Stop),
-                                      Start = ifelse(is.na(Start), 0, Start),
-                                      Fup = max(Stop)) %>% ungroup())
-
-# rearrange to counting process form to calculate the Q matrix
-l_surv_cpform = l_surv %>% map(~counting_process_form(.) %>% mutate(id = as.numeric(id)))
-
-# arrange the exposure history  in wide format in a matrix
-l_tl_hist = l_surv %>% map(. %>% group_by(Id) %>% ungroup() %>% select(Id, load, Stop))
-
-# arrange the exposure history in wide format in a matrix
-l_tl_hist_spread_day = 
-  l_tl_hist %>% map(. %>% pivot_wider(names_from = Stop, values_from = load) %>% select(-Id) %>% as.matrix)
-
-# find the min and max lag
-# lag set at 4 weeks (28) as is often used in tl studies
-# since the first day is day 0, the 28th day is day 27
-lag_min = 0
-lag_max = 27
-
-# calc Q matrices
-l_q_mat = map2(.x = l_surv_cpform,
-               .y = l_tl_hist_spread_day, 
-               ~calc_q_matrix(.x, .y))
-
-# make the crossbasis
-l_cb_dlnm = l_q_mat %>% map(~crossbasis(., lag=c(lag_min, lag_max), 
-                                        argvar = list(fun="poly", degree = 2),
-                                        arglag = list(fun="ns", knots = 3)))
-
-# if we do not use the whole data, we only have 12 injuries
-# fit DLNM
-l_fit_dlnm = map2(.x = l_surv_cpform,
-                  .y = l_cb_dlnm,
-                  ~coxph(Surv(enter, exit, event) ~ .y, .x, y = FALSE, ties = "efron"))
-
-l_fit_dlnm %>% pool()
-
-
-library(parfm)
-# b) We then fit a model with Weibull baseline and gamma frailty:
-fit_frailty = parfm(Surv(time,status)~factor(trt),cluster="id", frailty="gamma", data=eye)
-exp(-0.960)
-
-# fit models
-fit_ra = coxph(Surv(enter, exit, event) ~ ob_ra, d_survival_sim_cpform_mods, y = FALSE, ties = "efron")
-fit_ewma = coxph(Surv(enter, exit, event) ~ ob_ewma, d_survival_sim_cpform_mods, y = FALSE, ties = "efron")
-fit_redi = coxph(Surv(enter, exit, event) ~ ob_redi, d_survival_sim_cpform_mods, y = FALSE, ties = "efron")
-
-list_fits = list(fit_ra, fit_ewma, fit_redi, fit_dlnm)
-
-# run predictions
-cp_preds_ra = crosspred(ob_ra, fit_ra, at = predvalues, cen = 600, cumul = TRUE)
-cp_preds_ewma = crosspred(ob_ewma, fit_ewma, at = predvalues, cen = 600, cumul = TRUE)
-cp_preds_redi = crosspred(ob_redi, fit_redi, at = predvalues, cen = 600, cumul = TRUE)
-cp_preds_dlnm = crosspred(cb_dlnm, fit_dlnm, at = predvalues, cen = 600, cumul = TRUE)
+png("figure7_part2_2d.png", units = "in", width = 10, height = 4, res = 600)
+ggpubr::ggarrange(plot_dlnm_2d2, plot_dlnm_2d1, ncol = 2, labels = c("C) DLNM fit per sRPE", "D) DLNM fit per lag"))
+dev.off()
