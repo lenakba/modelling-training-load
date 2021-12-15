@@ -27,7 +27,7 @@ l_handball = map2(.x = l_handball,
      .y = l_index,
      ~left_join(.x, .y, by = "p_id")) %>% map(. %>% select(-p_id) %>% rename(p_id = rowname))
 
-d_confounders = l_handball[[1]] %>% distinct(p_id, age, sex) %>% mutate(sex = factor(sex))
+d_confounders = l_handball[[1]] %>% distinct(p_id, .keep_all = TRUE) %>% select(p_id, sex, age) %>% mutate(sex = factor(sex))
 
 # function to arrange the simulated survival data in counting process form
 counting_process_form = function(d_survival_sim){
@@ -61,8 +61,13 @@ calc_q_matrix = function(d_counting_process, d_tl_hist_wide){
 }
 
 # add number of days
-l_handball = l_handball %>% map(. %>% arrange(p_id, date_training) %>% group_by(p_id) %>% mutate(day = 1:n()))
-l_handball = l_handball %>% map(. %>% group_by(p_id) %>% mutate(Fup = ifelse(injury == 1, day, NA)) %>% fill(Fup, .direction = "up") %>% ungroup())
+l_handball = l_handball %>% map(. %>% arrange(p_id, date_training) %>% 
+                                  group_by(p_id) %>% 
+                                  mutate(day = 1:n()))
+l_handball = l_handball %>% map(. %>% group_by(p_id) %>%
+                                  mutate(Fup = ifelse(injury == 1, day, NA)) %>% 
+                                  fill(Fup, .direction = "up") %>% 
+                                  ungroup())
 
 ########################################## with frailty for recurrent events
 l_surv = l_handball %>% map(. %>% group_by(p_id) %>% 
@@ -72,7 +77,6 @@ l_surv = l_handball %>% map(. %>% group_by(p_id) %>%
 
 # rearrange to counting process form to calculate the Q matrix
 l_surv_cpform = l_surv %>% map(~counting_process_form(.) %>% mutate(id = as.numeric(id)))
-
 
 # arrange the exposure history in wide format in a matrix
 l_tl_hist = l_surv %>% map(. %>% group_by(Id) %>% ungroup() %>% select(Id, load, Stop))
@@ -92,33 +96,32 @@ l_q_mat = map2(.x = l_surv_cpform,
                .y = l_tl_hist_spread_day, 
                ~calc_q_matrix(.x, .y))
 
+# add confounders back to datasets
+l_surv_cpform = l_surv_cpform %>% map(. %>% mutate(id = as.character(id)) %>% as_tibble() %>%
+                                        left_join(d_confounders, by = c("id" = "p_id")))
+
 # make the crossbasis
 l_cb_dlnm = l_q_mat %>% map(~crossbasis(., lag=c(lag_min, lag_max), 
                                         argvar = list(fun="ns", knots = 3),
                                         arglag = list(fun="ns", knots = 3)))
 
-# add confounders back to datasets
-#l_surv_cpform = l_surv_cpform %>% map(. %>% mutate(id = as.character(id)) %>% left_join(d_confounders, by = c("id" = "p_id")))
-
-# if we do not use the whole data, we only have 12 injuries
 # fit DLNM
 l_fit_dlnm = map2(.x = l_surv_cpform,
                   .y = l_cb_dlnm,
-                  ~coxph(Surv(enter, exit, event) ~ .y, .x, y = FALSE, ties = "efron"))
+                  ~coxph(Surv(enter, exit, event) ~ .y + sex + age, .x, y = FALSE, ties = "efron"))
 
 l_fit_dlnm %>% pool()
 
 
 library(parfm)
 # b) We then fit a model with Weibull baseline and gamma frailty:
-fit_frailty = parfm(Surv(time,status)~factor(trt),cluster="id", frailty="gamma", data=eye)
+fit_frailty = parfm(Surv(enter, exit, event)~factor(trt), cluster="id", frailty="gamma", data=eye)
+
+l_fit_dlnm = map2(.x = l_surv_cpform,
+                  .y = l_cb_dlnm,
+                  ~parfm(Surv(enter, exit, event) ~ .y, cluster="id", frailty="gamma", data = .x))
 exp(-0.960)
-
-
-
-
-
-
+?Surv
 ########################################## Time to first injury below
 
 # calc follow up time for those with and without an injury event
