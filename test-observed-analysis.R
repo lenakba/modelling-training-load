@@ -35,6 +35,9 @@ l_handball = map2(.x = l_handball,
 
 d_confounders = l_handball[[1]] %>% distinct(p_id, .keep_all = TRUE) %>% select(p_id, sex, age) %>% mutate(sex = factor(sex))
 
+
+l_handball[[1]] %>% count(injury)
+
 # function to arrange the simulated survival data in counting process form
 counting_process_form = function(d_survival_sim){
   d_follow_up_times = d_survival_sim %>% distinct(Id, Fup)
@@ -106,28 +109,41 @@ l_surv_cpform = l_surv_cpform %>% map(. %>% mutate(id = as.character(id)) %>% as
 l_cb_dlnm = l_q_mat %>% map(~crossbasis(., lag=c(lag_min, lag_max), 
                                         argvar = list(fun="ns", knots = 3),
                                         arglag = list(fun="lin")))
-
 # fit DLNM
 l_fit_dlnm = map2(.x = l_surv_cpform,
                   .y = l_cb_dlnm,
                   ~coxph(Surv(enter, exit, event) ~ .y + sex + age + 
                            frailty.gaussian(id), .x, y = FALSE, ties = "efron"))
 
-summary(l_fit_dlnm %>% pool())
+d_pooled = summary(l_fit_dlnm %>% pool(), conf.int = TRUE, exponentiate = TRUE) %>% as_tibble() %>% mutate_if(is.numeric, ~round(.,3))
+
+write_excel_csv(d_pooled, "sup_tableS4_modelcoefs.csv", delim = ";", na = "")
 
 #################################################### Figures for exploring effects
 
+library(lmisc)
+# shared figure options
+text_size = 14
+ostrc_theme =  theme(panel.border = element_blank(), 
+                     panel.background = element_blank(),
+                     panel.grid = element_blank(),
+                     axis.line = element_line(color = nih_distinct[4]),
+                     strip.background = element_blank(),
+                     strip.text.x = element_text(size = text_size, family="Trebuchet MS", colour="black", face = "bold", hjust = -0.01),
+                     axis.ticks = element_line(color = nih_distinct[4]),
+                     legend.position = "bottom")
+
 # vector of tl values used in visualizations of predictions
 predvalues = seq(min(l_handball[[1]]$load), max(l_handball[[1]]$load), 100)
-spre_fixed = 3000
-lag_fixed = "lag0"
 lag_seq = lag_min:lag_max 
 
+png("figure5_part1_3d.png", units = "in", width = 10, height = 5, res = 600)
+par(mfrow=c(1,2), mar=c(0.8,0.1,1,0.1), mgp = c(4, 1, 0))
 # predict hazards
 l_cp_preds_dlnm = 
   map2(.x = l_fit_dlnm,
-     .y = l_cb_dlnm,
-     ~crosspred(.y, .x, at = predvalues, cen = spre_fixed, cumul = TRUE))
+       .y = l_cb_dlnm,
+       ~crosspred(.y, .x, at = predvalues, cen = 458, cumul = TRUE))
 
 # function for plucking the right matrix out of the crosspred list within the list of crosspred lists
 pluck_mat = function(x, pos){pluck(l_cp_preds_dlnm, x, pos)}
@@ -165,6 +181,7 @@ l_matRRfit_high = list(d_preds_high1, d_preds_high2, d_preds_high3, d_preds_high
 mat_matRRfit_high = reduce(l_matRRfit_high, `+`) / length(l_matRRfit_high)
 
 # lag-response curve for sRPE 3000
+spre_fixed = "100"
 rownumber = which(rownames(mat_matRRfit)==spre_fixed)
 d_preds_per_lag = as_tibble(mat_matRRfit[rownumber,]) %>% 
   rename(coef = value) %>% 
@@ -172,57 +189,109 @@ d_preds_per_lag = as_tibble(mat_matRRfit[rownumber,]) %>%
          ci_low = mat_matRRfit_low[rownumber,],
          ci_high = mat_matRRfit_high[rownumber,])
 
-########## create figure
-library(lmisc)
-# shared figure options
-text_size = 14
-ostrc_theme =  theme(panel.border = element_blank(), 
-                     panel.background = element_blank(),
-                     panel.grid = element_blank(),
-                     axis.line = element_line(color = nih_distinct[4]),
-                     strip.background = element_blank(),
-                     strip.text.x = element_text(size = text_size, family="Trebuchet MS", colour="black", face = "bold", hjust = -0.01),
-                     axis.ticks = element_line(color = nih_distinct[4]),
-                     legend.position = "bottom")
+# figure for centering at average sRPE, 458
+persp(x = predvalues, y = lag_seq, mat_matRRfit, ticktype="detailed", theta=230, ltheta=150, phi=40, lphi=30,
+      ylab="Lag (Days)", zlab="HR", shade=0.75, r=sqrt(3), d=5, cex.axis=1.0, cex.lab=1.0,
+      border=grey(0.2), col = nih_distinct[1], xlab = "sRPE", main = "A Reference sRPE = 458", zlim = c(0.6, 1.6))
 
-plot_dlnm_2d1 = ggplot(d_preds_per_lag, aes(x = lag, y = coef, group = 1)) +
-  geom_line() +
-  geom_ribbon(aes(min = ci_low, max = ci_high), alpha = 0.3, fill = nih_distinct[1]) +
-  theme_base(text_size) +
-  ostrc_theme +
-  xlab("Lag (days)") +
-  ylab("HR for sRPE of 1000") +
-  scale_x_continuous(breaks = scales::breaks_width(3, 0))
+
+############# centering at sRPE = 3000
+
+# predict hazards
+l_cp_preds_dlnm = 
+  map2(.x = l_fit_dlnm,
+       .y = l_cb_dlnm,
+       ~crosspred(.y, .x, at = predvalues, cen = 3000, cumul = TRUE))
+
+# function for plucking the right matrix out of the crosspred list within the list of crosspred lists
+pluck_mat = function(x, pos){pluck(l_cp_preds_dlnm, x, pos)}
+# 13 is matRRfit
+matRRfit = 13
+d_preds1 = pluck_mat(1, matRRfit)
+d_preds2 = pluck_mat(2, matRRfit)
+d_preds3 = pluck_mat(3, matRRfit)
+d_preds4 = pluck_mat(4, matRRfit)
+d_preds5 = pluck_mat(5, matRRfit)
+l_matRRfit = list(d_preds1, d_preds2, d_preds3, d_preds4, d_preds5)
+# average across preds
+mat_matRRfit = reduce(l_matRRfit, `+`) / length(l_matRRfit)
+
+# conflow
+matRRfit_low = 14
+d_preds_low1 = pluck_mat(1, matRRfit_low)
+d_preds_low2 = pluck_mat(2, matRRfit_low)
+d_preds_low3 = pluck_mat(3, matRRfit_low)
+d_preds_low4 = pluck_mat(4, matRRfit_low)
+d_preds_low5 = pluck_mat(5, matRRfit_low)
+l_matRRfit_low = list(d_preds_low1, d_preds_low2, d_preds_low3, d_preds_low4, d_preds_low5)
+# average across preds
+mat_matRRfit_low = reduce(l_matRRfit_low, `+`) / length(l_matRRfit_low)
+
+# confhigh
+matRRfit_high = 15
+d_preds_high1 = pluck_mat(1, matRRfit_high)
+d_preds_high2 = pluck_mat(2, matRRfit_high)
+d_preds_high3 = pluck_mat(3, matRRfit_high)
+d_preds_high4 = pluck_mat(4, matRRfit_high)
+d_preds_high5 = pluck_mat(5, matRRfit_high)
+l_matRRfit_high = list(d_preds_high1, d_preds_high2, d_preds_high3, d_preds_high4, d_preds_high5)
+# average across preds
+mat_matRRfit_high = reduce(l_matRRfit_high, `+`) / length(l_matRRfit_high)
+
+# lag-response curve for sRPE 3000
+spre_fixed = "100"
+rownumber = which(rownames(mat_matRRfit)==spre_fixed)
+d_preds_per_lag = as_tibble(mat_matRRfit[rownumber,]) %>% 
+  rename(coef = value) %>% 
+  mutate(lag = 0:27,
+         ci_low = mat_matRRfit_low[rownumber,],
+         ci_high = mat_matRRfit_high[rownumber,])
+
+# figure for centering at average sRPE, 458
+persp(x = predvalues, y = lag_seq, mat_matRRfit, ticktype="detailed", theta=230, ltheta=150, phi=40, lphi=30,
+      ylab="Lag (Days)", zlab="HR", shade=0.75, r=sqrt(3), d=5, cex.axis=1.0, cex.lab=1.0,
+      border=grey(0.2), col = nih_distinct[1], xlab = "sRPE", main = "B Reference sRPE = 3000", zlim = c(0.6, 1.6))
+dev.off()
+
+########## create figures for lag effects only
 
 # exposure-response curve for lag 0
+lag_fixed = "lag0"
 colnumber = which(colnames(mat_matRRfit) == lag_fixed)
 d_preds_per_srpe = as_tibble(mat_matRRfit[,colnumber]) %>% 
   rename(coef = value) %>% 
-  mutate(srpe = tl_predvalues,
+  mutate(srpe = predvalues,
+         ci_low = mat_matRRfit_low[,colnumber],
+         ci_high = mat_matRRfit_high[,colnumber])
+
+plot_dlnm_2d1 = ggplot(d_preds_per_srpe, aes(x = srpe, y = coef, group = 1)) +
+  geom_hline(yintercept = 1, alpha = 0.3, size = 1) +
+  geom_ribbon(aes(min = ci_low, max = ci_high), alpha = 0.3, fill = nih_distinct[1]) +
+  geom_line(size = 0.75, color = nih_distinct[4]) +
+  theme_base(text_size) +
+  ostrc_theme +
+  xlab("sRPE (AU)") +
+  ylab("HR on Day 0") +
+  coord_cartesian(ylim = c(0.5, 1.5))
+
+lag_fixed = "lag27"
+colnumber = which(colnames(mat_matRRfit) == lag_fixed)
+d_preds_per_srpe = as_tibble(mat_matRRfit[,colnumber]) %>% 
+  rename(coef = value) %>% 
+  mutate(srpe = predvalues,
          ci_low = mat_matRRfit_low[,colnumber],
          ci_high = mat_matRRfit_high[,colnumber])
 
 plot_dlnm_2d2 = ggplot(d_preds_per_srpe, aes(x = srpe, y = coef, group = 1)) +
-  geom_line() +
+  geom_hline(yintercept = 1, alpha = 0.3, size = 1) +
   geom_ribbon(aes(min = ci_low, max = ci_high), alpha = 0.3, fill = nih_distinct[1]) +
+  geom_line(size = 0.75, color = nih_distinct[4]) +
   theme_base(text_size) +
   ostrc_theme +
-  xlab("Training load (sRPE)") +
-  ylab("HR on Day 0") +
-  scale_x_continuous(limits = c(0, 1200), breaks = scales::breaks_width(200, 0))
+  xlab("sRPE (AU)") +
+  ylab("HR on Day -27") +
+  coord_cartesian(ylim = c(0.5, 1.5))
 
-
-# 3D fig
-
-png("figure7_part1_3d.png", units = "in", width = 10, height = 5, res = 600)
-par(mfrow=c(1,2), mar=c(0.8,0.1,1,0.1), mgp = c(4, 1, 0))
-# 3d plots
-
-persp(x = predvalues, y = lag_seq, mat_matRRfit, ticktype="detailed", theta=230, ltheta=150, phi=40, lphi=30,
-      ylab="Lag (Days)", zlab="HR", shade=0.75, r=sqrt(3), d=5, cex.axis=1.0, cex.lab=1.0,
-      border=grey(0.2), col = nih_distinct[1], xlab = "sRPE", main = "A Effect plane")
-dev.off()
-
-png("figure7_part2_2d.png", units = "in", width = 10, height = 4, res = 600)
-ggpubr::ggarrange(plot_dlnm_2d2, plot_dlnm_2d1, ncol = 2, labels = c("C) DLNM fit per sRPE", "D) DLNM fit per lag"))
+png("figure5_part2_2d.png", units = "in", width = 10, height = 4, res = 600)
+ggpubr::ggarrange(plot_dlnm_2d1, plot_dlnm_2d2, ncol = 2, labels = c("C Risk on current day", "D Risk on 28th lag day"))
 dev.off()
