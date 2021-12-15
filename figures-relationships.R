@@ -103,7 +103,7 @@ x = c(tl_predvalues, tl_predvalues_change)
 y = c(exp(fj(tl_predvalues)), exp(flin(tl_predvalues_change)))
 d_fx_coefs = tibble(tl = x, coef = y) %>% 
              mutate(index = 1:n(),
-                    group = fct_inorder(ifelse(index <= length(tl_predvalues), "A) sRPE (AU)", "B) %ΔsRPE (AU)")))
+                    group = fct_inorder(ifelse(index <= length(tl_predvalues), "A sRPE (AU)", "B %ΔsRPE (AU)")))
 
 fplot = ggplot(d_fx_coefs, aes(x = tl, y = coef)) +
   facet_wrap(~group, scales = "free") +
@@ -121,7 +121,7 @@ dev.off()
 
 # make list of lag functions
 wfun_list = list(wconst, wdecay, wexponential_decay, wdirection_flip)
-names_lag = list("A) Constant", "B) Decay", "C) Exponential Decay", "D) Direct, then inverse")
+names_lag = list("A Constant", "B Decay", "C Exponential Decay", "D Direct, then inverse")
 
 # calculate true coefs
 predvalue_list = list(lag_seq, lag_seq, lag_seq, lag_seq)
