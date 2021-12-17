@@ -232,14 +232,6 @@ d_preds_per_lag = as_tibble(mat_matRRfit[rownumber,]) %>%
          ci_low = mat_matRRfit_low[rownumber,],
          ci_high = mat_matRRfit_high[rownumber,])
 
-png("figure5_part2_3d.png", units = "in", width = 10, height = 5, res = 600)
-# figure for centering at average sRPE, 458
-persp(x = predvalues, y = lag_seq, mat_matRRfit, ticktype="detailed", theta=230, ltheta=150, phi=40, lphi=30,
-      ylab="Lag (Days)", zlab="HR", shade=0.75, r=sqrt(3), d=5, cex.axis=1.0, cex.lab=1.0,
-      border=grey(0.2), col = nih_distinct[1], xlab = "sRPE", main = "D 3D plane of effects", zlim = c(0.6, 1.6))
-dev.off()
-
-
 cairo_pdf("figure5_part2_3d.pdf", width = 12, height = 7)
 # figure for centering at average sRPE, 458
 persp(x = predvalues, y = lag_seq, mat_matRRfit, ticktype="detailed", theta=230, ltheta=150, phi=40, lphi=30,
@@ -286,10 +278,6 @@ plot_dlnm_2d2 = ggplot(d_preds_per_srpe, aes(x = srpe, y = coef, group = 1)) +
   xlab("sRPE (AU)") +
   ylab("HR on Day 27") +
   coord_cartesian(ylim = c(0.5, 1.5))
-
-png("figure5_part1_2d.png", units = "in", width = 10, height = 8, res = 600)
-ggpubr::ggarrange(plot_dlnm_2d1, plot_dlnm_2d2, plot_cumul, ncol = 2, nrow = 2, labels = c("A Risk on current day", "B Risk on 28th lag day", "C Cumulative effect"))
-dev.off()
 
 cairo_pdf("figure5_part1_2d.pdf", width = 10, height = 8)
 ggpubr::ggarrange(plot_dlnm_2d1, plot_dlnm_2d2, plot_cumul, ncol = 2, nrow = 2, labels = c("A Risk on current day", "B Risk on 27th day", "C Cumulative effect"))
