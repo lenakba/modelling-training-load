@@ -35,9 +35,6 @@ l_handball = map2(.x = l_handball,
 
 d_confounders = l_handball[[1]] %>% distinct(p_id, .keep_all = TRUE) %>% select(p_id, sex, age) %>% mutate(sex = factor(sex))
 
-
-l_handball[[1]] %>% count(injury)
-
 # function to arrange the simulated survival data in counting process form
 counting_process_form = function(d_survival_sim){
   d_follow_up_times = d_survival_sim %>% distinct(Id, Fup)
