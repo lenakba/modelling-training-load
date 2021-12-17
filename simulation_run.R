@@ -23,11 +23,9 @@ symmetrized_change = function(x, y){
 
 # observed values
 tl_observed = (d_load %>% filter(srpe <= 1200))$srpe
-#tl_observed_change = lead(tl_observed)-tl_observed
 tl_observed_change = symmetrized_change(lead(tl_observed), tl_observed)
 tl_observed_change = tl_observed_change[-length(tl_observed_change)]
 tl_valid = min(tl_observed):max(tl_observed)
-tl_valid = 0:1200
 # lag set at 4 weeks (28) as is often used in tl studies
 # since the first day is day 0, the 28th day is day 27
 lag_min = 0
@@ -400,7 +398,7 @@ folder_lin_decay = paste0(base_folder, "change_lin_decay\\")
 folder_lin_exponential_decay = paste0(base_folder, "change_lin_exponential_decay\\")
 
 
-startsim = 1760
+startsim = 1
 nsim = 1900
 seqsim = startsim:nsim
 set.seed(1234)
@@ -416,12 +414,12 @@ for(i in seqsim){
                   predvalues = tl_predvalues, i = i, folder = folder_lin_direction_flip, direction_flip = TRUE)
   
   # change in training load
-  # sim_fit_and_res(nsub, t_max, tl_valid, "change", tl_var = t_load_change, fvar = flin, flag = wconst,
-  #                 predvalues = tl_predvalues_change, i = i, folder = folder_lin_constant)
-  # sim_fit_and_res(nsub, t_max, tl_valid, "change", tl_var = t_load_change, fvar = flin, flag = wdecay,
-  #                 predvalues = tl_predvalues_change, i = i, folder = folder_lin_decay)
-  # sim_fit_and_res(nsub, t_max, tl_valid, "change", tl_var = t_load_change, fvar = flin, flag = wexponential_decay,
-  #                 predvalues = tl_predvalues_change, i = i, folder = folder_lin_exponential_decay)
+  sim_fit_and_res(nsub, t_max, tl_valid, "change", tl_var = t_load_change, fvar = flin, flag = wconst,
+                  predvalues = tl_predvalues_change, i = i, folder = folder_lin_constant)
+  sim_fit_and_res(nsub, t_max, tl_valid, "change", tl_var = t_load_change, fvar = flin, flag = wdecay,
+                  predvalues = tl_predvalues_change, i = i, folder = folder_lin_decay)
+  sim_fit_and_res(nsub, t_max, tl_valid, "change", tl_var = t_load_change, fvar = flin, flag = wexponential_decay,
+                  predvalues = tl_predvalues_change, i = i, folder = folder_lin_exponential_decay)
 }
 
 #-----------------------Option: multiple cores
