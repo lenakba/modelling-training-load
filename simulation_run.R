@@ -27,6 +27,7 @@ tl_observed = (d_load %>% filter(srpe <= 1200))$srpe
 tl_observed_change = symmetrized_change(lead(tl_observed), tl_observed)
 tl_observed_change = tl_observed_change[-length(tl_observed_change)]
 tl_valid = min(tl_observed):max(tl_observed)
+tl_valid = 0:1200
 # lag set at 4 weeks (28) as is often used in tl studies
 # since the first day is day 0, the 28th day is day 27
 lag_min = 0
@@ -36,6 +37,7 @@ lag_seq = lag_min:lag_max # number of days before current day assumed to affect 
 # vector of tl values used in visualizations of predictions
 tl_predvalues = seq(min(tl_observed), max(tl_observed), 10)
 tl_predvalues_change = seq(min(tl_observed_change, na.rm = TRUE), max(tl_observed_change, na.rm = TRUE))
+tl_predvalues_change = seq(-100, 100)
 tl_predvalues_acwr = seq(0.1, 3.5)
 tl_predvalues_weekly_change = seq(-80, 80)
 
@@ -398,28 +400,28 @@ folder_lin_decay = paste0(base_folder, "change_lin_decay\\")
 folder_lin_exponential_decay = paste0(base_folder, "change_lin_exponential_decay\\")
 
 
-startsim = 4
-nsim = 500
+startsim = 1760
+nsim = 1900
 seqsim = startsim:nsim
 set.seed(1234)
 for(i in seqsim){
   # amount of training load
-  # sim_fit_and_res(nsub, t_max, tl_valid, "amount", tl_var = t_load, fvar = fj, flag = wconst,
-  #                 predvalues = tl_predvalues, i = i, folder = folder_j_constant)
-  # sim_fit_and_res(nsub, t_max, tl_valid, "amount", tl_var = t_load, fvar = fj, flag = wdecay,
-  #                 predvalues = tl_predvalues, i = i, folder = folder_j_decay)
-  # sim_fit_and_res(nsub, t_max, tl_valid, "amount", tl_var = t_load, fvar = fj, flag = wexponential_decay,
-  #                 predvalues = tl_predvalues, i = i, folder = folder_j_exponential_decay)
-  # sim_fit_and_res(nsub, t_max, tl_valid, "amount", tl_var = t_load, fvar = flin_amount, flag = wdirection_flip,
-  #                 predvalues = tl_predvalues, i = i, folder = folder_lin_direction_flip, direction_flip = TRUE)
+  sim_fit_and_res(nsub, t_max, tl_valid, "amount", tl_var = t_load, fvar = fj, flag = wconst,
+                  predvalues = tl_predvalues, i = i, folder = folder_j_constant)
+  sim_fit_and_res(nsub, t_max, tl_valid, "amount", tl_var = t_load, fvar = fj, flag = wdecay,
+                  predvalues = tl_predvalues, i = i, folder = folder_j_decay)
+  sim_fit_and_res(nsub, t_max, tl_valid, "amount", tl_var = t_load, fvar = fj, flag = wexponential_decay,
+                  predvalues = tl_predvalues, i = i, folder = folder_j_exponential_decay)
+  sim_fit_and_res(nsub, t_max, tl_valid, "amount", tl_var = t_load, fvar = flin_amount, flag = wdirection_flip,
+                  predvalues = tl_predvalues, i = i, folder = folder_lin_direction_flip, direction_flip = TRUE)
   
   # change in training load
-  sim_fit_and_res(nsub, t_max, tl_valid, "change", tl_var = t_load_change, fvar = flin, flag = wconst,
-                  predvalues = tl_predvalues_change, i = i, folder = folder_lin_constant)
-  sim_fit_and_res(nsub, t_max, tl_valid, "change", tl_var = t_load_change, fvar = flin, flag = wdecay,
-                  predvalues = tl_predvalues_change, i = i, folder = folder_lin_decay)
-  sim_fit_and_res(nsub, t_max, tl_valid, "change", tl_var = t_load_change, fvar = flin, flag = wexponential_decay,
-                  predvalues = tl_predvalues_change, i = i, folder = folder_lin_exponential_decay)
+  # sim_fit_and_res(nsub, t_max, tl_valid, "change", tl_var = t_load_change, fvar = flin, flag = wconst,
+  #                 predvalues = tl_predvalues_change, i = i, folder = folder_lin_constant)
+  # sim_fit_and_res(nsub, t_max, tl_valid, "change", tl_var = t_load_change, fvar = flin, flag = wdecay,
+  #                 predvalues = tl_predvalues_change, i = i, folder = folder_lin_decay)
+  # sim_fit_and_res(nsub, t_max, tl_valid, "change", tl_var = t_load_change, fvar = flin, flag = wexponential_decay,
+  #                 predvalues = tl_predvalues_change, i = i, folder = folder_lin_exponential_decay)
 }
 
 #-----------------------Option: multiple cores
@@ -429,7 +431,7 @@ set.seed(1234)
 numCores = 4
 registerDoParallel(numCores)
 
-startsim = 43
+startsim = 1
 nsim = 1900
 seqsim = startsim:nsim
 
@@ -441,8 +443,14 @@ foreach (i = seqsim) %dopar% {
   library(survival)
   library(splines)
   library(slider) 
-  sim_fit_and_res(nsub, t_max, tl_valid, "amount", tl_var = t_load, fvar = fj, flag = wdecay, 
+  sim_fit_and_res(nsub, t_max, tl_valid, "amount", tl_var = t_load, fvar = fj, flag = wconst,
+                  predvalues = tl_predvalues, i = i, folder = folder_j_constant)
+  sim_fit_and_res(nsub, t_max, tl_valid, "amount", tl_var = t_load, fvar = fj, flag = wdecay,
                   predvalues = tl_predvalues, i = i, folder = folder_j_decay)
+  sim_fit_and_res(nsub, t_max, tl_valid, "amount", tl_var = t_load, fvar = fj, flag = wexponential_decay,
+                  predvalues = tl_predvalues, i = i, folder = folder_j_exponential_decay)
+  sim_fit_and_res(nsub, t_max, tl_valid, "amount", tl_var = t_load, fvar = flin_amount, flag = wdirection_flip,
+                  predvalues = tl_predvalues, i = i, folder = folder_lin_direction_flip, direction_flip = TRUE)
 }
 options(warn=0)
 
