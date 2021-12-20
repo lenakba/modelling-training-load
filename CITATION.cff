@@ -1,0 +1,10 @@
+cff-version: 1.0.0
+message: "If you use this software, please cite it as below."
+authors:
+  - family-names: Bache-Mathiesen
+    given-names: Lena Kristin
+    orcid: https://orcid.org/0000-0002-9466-7003
+title: "Modelling the cumulative effect of training load on injury risk: R code repository"
+version: 1.0.0
+url: https://github.com/lenakba/modelling-training-load
+date-released: 2021-12-20
