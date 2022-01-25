@@ -99,21 +99,28 @@ ostrc_theme =  theme(panel.border = element_blank(),
                      axis.ticks = element_line(color = nih_distinct[4]),
                      legend.position = "bottom")
 
-x = c(tl_predvalues, tl_predvalues_change)
-y = c(exp(fj(tl_predvalues)), exp(flin(tl_predvalues_change)))
+x = c(tl_predvalues, tl_predvalues, tl_predvalues_change)
+y = c(exp(fj(tl_predvalues)), exp(flin_amount(tl_predvalues)), exp(flin(tl_predvalues_change)))
 d_fx_coefs = tibble(tl = x, coef = y) %>% 
              mutate(index = 1:n(),
-                    group = fct_inorder(ifelse(index <= length(tl_predvalues), "A sRPE (AU)", "B %ΔsRPE (AU)")))
+                    group = case_when(index <= length(tl_predvalues) ~ "A sRPE (AU) J shaped", 
+                                      index > length(tl_predvalues) & index <= length(tl_predvalues)*2 ~ "B sRPE (AU) Linear", 
+                                       TRUE ~ "C %ΔsRPE (AU) Linear"),
+                    group = fct_inorder(group))
+
+
 
 fplot = ggplot(d_fx_coefs, aes(x = tl, y = coef)) +
-  facet_wrap(~group, scales = "free") +
+  facet_wrap(~group, scales = "free", ncol = 2) +
+  geom_hline(yintercept = 1, alpha = 0.3, size = 1.2, color = nih_distinct[1]) +
   geom_line(color = nih_distinct[2], size = 0.8) +
   theme_line(text_size) +
   ylab("Hazard Ratio") +
   xlab("Training load") +
-  ostrc_theme
+  ostrc_theme +
+  scale_y_continuous(limits = c(0.5, 3.0), breaks = scales::breaks_width(0.5, 0))
 
-emf("supfig_f_funksjon_coefs.emf", width = 8, height = 4)
+emf("supfig_f_funksjon_coefs.emf", width = 8, height = 7)
 fplot
 dev.off()
 
@@ -141,12 +148,16 @@ d_coefs_lags = bind_rows(l_coefs_lags)
 
 wplot = ggplot(d_coefs_lags, aes(x = lag, y = coef)) +
   facet_wrap(~group, ncol = 2, scales = "free") +
+  geom_hline(yintercept = 1, alpha = 0.3, size = 1.2, color = nih_distinct[1]) +
   geom_line(color = nih_distinct[2], size = 0.8) +
   theme_line(text_size) +
   ylab("Hazard Ratio") +
   xlab("Lag (Days)") +
   scale_x_continuous(limits = c(0, 27), breaks = scales::breaks_width(3, 0)) +
-  ostrc_theme
+  ostrc_theme +
+  coord_cartesian(ylim = c(0, 3.0))
+
+
 
 emf("supfig_w_funksjon_coefs.emf", width = 10, height = 6)
 wplot
