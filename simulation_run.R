@@ -385,7 +385,7 @@ sim_fit_and_res = function(nsub, t_max, tl_values, t_load_type, tl_var, fvar, fl
   saveRDS(d_res %>% mutate(rep = i), file = paste0(folder, "res_",i,"_.rds"))
 }
 
-base_folder = "O:\\Prosjekter\\Bache-Mathiesen-003-modelling-training-load\\Data\\simulations\\"
+base_folder = "my\\file\\location\\"
 # amount of load
 folder_j_constant = paste0(base_folder, "amount_j_constant\\")
 folder_j_decay = paste0(base_folder, "amount_j_decay\\")
