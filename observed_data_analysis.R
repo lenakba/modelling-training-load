@@ -40,13 +40,28 @@ l_handball = map2(.x = l_handball,
 
 d_confounders = l_handball[[1]] %>% distinct(p_id, .keep_all = TRUE) %>% select(p_id, sex, age) %>% mutate(sex = factor(sex))
 
-# function to arrange the simulated survival data in counting process form
+# function to arrange the survival data in counting process form
 counting_process_form = function(d_survival_sim){
   d_follow_up_times = d_survival_sim %>% distinct(Id, Fup)
   d_surv_lim = map2(.x = d_follow_up_times$Id,
                     .y = d_follow_up_times$Fup,
                     ~d_survival_sim %>% filter(Id == .x) %>% slice(.y)) %>% 
     bind_rows() %>% select(event = Event, exit = Stop, id = Id)
+  
+  # add in individuals with no events
+  no_event_ids = d_survival_sim %>% 
+    group_by(Id) %>% 
+    summarise(n_event = sum(Event, na.rm = TRUE)) %>% 
+    filter(n_event == 0) %>% 
+    distinct(Id) %>% 
+    ungroup()
+  
+  d_surv_lim_no_events = d_follow_up_times %>% 
+    filter(Id %in% no_event_ids$Id) %>% 
+    mutate(event = 0) %>% 
+    select(event, exit = Fup, id = Id)
+  
+  d_surv_lim = bind_rows(d_surv_lim, d_surv_lim_no_events)
   
   # extracting timepoints in which an event happened
   ftime = d_surv_lim %>% filter(event == 1) %>% distinct(exit) %>% arrange(exit) %>% pull()
@@ -78,6 +93,15 @@ l_handball = l_handball %>% map(. %>% arrange(p_id, date_training) %>%
 l_handball = l_handball %>% map(. %>% group_by(p_id) %>%
                                   mutate(Fup = ifelse(injury == 1, day, NA)) %>% 
                                   fill(Fup, .direction = "up") %>% 
+                                  ungroup())
+
+# find follow-up days for those who were never injured 
+no_event_ids = l_handball[[1]] %>% group_by(p_id) %>% 
+  summarise(n_event = sum(injury, na.rm = TRUE)) %>% 
+  filter(n_event == 0) %>% distinct(p_id)
+
+l_handball = l_handball %>% map(. %>% group_by(p_id) %>% 
+                                  mutate(Fup = ifelse(p_id %in% no_event_ids$p_id, max(day), Fup)) %>% 
                                   ungroup())
 
 ########################################## with frailty for recurrent events
