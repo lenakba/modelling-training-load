@@ -104,6 +104,12 @@ l_handball = l_handball %>% map(. %>% group_by(p_id) %>%
                                   mutate(Fup = ifelse(p_id %in% no_event_ids$p_id, max(day), Fup)) %>% 
                                   ungroup())
 
+# Some players experienced injuries, but the last interval was censored.
+# Add the follow-up time for the final, censored interval.
+l_handball = l_handball %>% map(. %>% group_by(p_id) %>% 
+                                  mutate(Fup = ifelse(is.na(Fup), max(day), Fup)) %>% 
+                                  ungroup())
+
 ########################################## with frailty for recurrent events
 l_surv = l_handball %>% map(. %>% group_by(p_id) %>% 
                               rename(Stop = day, Id = p_id, Event = injury) %>% 
