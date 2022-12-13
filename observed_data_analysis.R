@@ -117,7 +117,8 @@ l_surv = l_handball %>% map(. %>% group_by(p_id) %>%
                                      Start = ifelse(is.na(Start), 0, Start)) %>% ungroup())
 
 # rearrange to counting process form to calculate the Q matrix
-l_surv_cpform = l_surv %>% map(~counting_process_form(.) %>% mutate(id = as.numeric(id)))
+l_surv_cpform = l_surv %>% map(~counting_process_form(.) %>% as_tibble() %>% 
+                                 mutate(p_id = id, id = as.numeric(id)))
 
 # arrange the exposure history in wide format in a matrix
 l_tl_hist = l_surv %>% map(. %>% group_by(Id) %>% ungroup() %>% select(Id, load, Stop))
@@ -132,8 +133,7 @@ l_q_mat = map2(.x = l_surv_cpform,
                ~calc_q_matrix(.x, .y))
 
 # add confounders back to datasets
-l_surv_cpform = l_surv_cpform %>% map(. %>% mutate(id = as.character(id)) %>% as_tibble() %>%
-                                        left_join(d_confounders, by = c("id" = "p_id")))
+l_surv_cpform = l_surv_cpform %>% map(. %>% left_join(d_confounders, by = "p_id"))
 
 # make the crossbasis
 l_cb_dlnm = l_q_mat %>% map(~crossbasis(., lag=c(lag_min, lag_max), 
@@ -143,7 +143,7 @@ l_cb_dlnm = l_q_mat %>% map(~crossbasis(., lag=c(lag_min, lag_max),
 l_fit_dlnm = map2(.x = l_surv_cpform,
                   .y = l_cb_dlnm,
                   ~coxph(Surv(enter, exit, event) ~ .y + sex + age + 
-                           frailty.gaussian(id), .x, y = FALSE, ties = "efron"))
+                           frailty.gaussian(p_id), .x, y = FALSE, ties = "efron"))
 
 d_pooled = summary(l_fit_dlnm %>% pool(), conf.int = TRUE, exponentiate = TRUE) %>% as_tibble() %>% mutate_if(is.numeric, ~round(.,3))
 
